@@ -1,0 +1,181 @@
+# yaml-language-server: $schema=./backlog.schema.json
+schema_version: 1
+project: reliable-batch-ingestion
+active_task_id: BI-010
+
+status_values:
+  - todo
+  - in_progress
+  - blocked
+  - done
+
+tasks:
+  - id: BI-000
+    title: Agent and project foundation
+    status: done
+    depends_on: []
+    scope:
+      - Establish repository-local agent workflow and state handoff.
+      - Add Python 3.12 and uv quality gates.
+      - Record Garage storage decision.
+    acceptance:
+      - A new agent session can recover scope, active task, decisions, and next step from repository files.
+      - make doctor, make lint, make test, and make verify are defined.
+      - No secrets or floating infrastructure image tags are committed.
+
+  - id: BI-005
+    title: Agent scaffolding audit and English normalization
+    status: done
+    depends_on: [BI-000]
+    scope:
+      - Independently audit agent instructions, documentation ownership, and task-state handoff.
+      - Translate all repository-owned content to English without changing product scope.
+      - Remove avoidable guidance duplication and add bounded drift checks.
+    acceptance:
+      - Repository-owned documentation is English-only.
+      - Agent, product, architecture, task, state, and history documents have explicit roles.
+      - Active-task drift and Cyrillic text are detected by the repository verification gate.
+      - Findings, intentional duplication, and preserved architectural decisions are documented.
+
+  - id: BI-006
+    title: Git repository initialization and first-task selection
+    status: done
+    depends_on: [BI-000]
+    scope:
+      - Initialize the Git repository with main as the default branch.
+      - Preserve ignore rules for local configuration, caches, environments, and generated data.
+      - Confirm BI-010 as the first product implementation task without starting it.
+    acceptance:
+      - The project directory is a Git work tree on branch main.
+      - Local secrets, virtual environments, caches, and generated data remain ignored.
+      - tasks/backlog.yaml and docs/STATE.md identify BI-010 as the active todo task.
+      - BI-010 has explicit scope, dependencies, and verifiable acceptance criteria.
+
+  - id: BI-010
+    title: Core deterministic contracts
+    status: todo
+    depends_on: [BI-000]
+    scope:
+      - Add typed environment configuration without import-time I/O.
+      - Add streaming SHA-256 checksum calculation.
+      - Define canonical inputs, normalization, and path layout for deterministic batch_id and object keys.
+      - Define unique run_id generation.
+      - Define typed manifest schema, source-specific nullability, UTC timestamp serialization, cardinality, statuses, transitions, serialization, and validation.
+      - Define structured run summary fields from the specification.
+      - Document the initial manifest and identifier contract before treating later changes as ADR-governed.
+    acceptance:
+      - Public functions and models are typed.
+      - Identical normalized logical input yields identical batch_id and object key.
+      - Different physical attempts yield different run_id values.
+      - Manifest includes every required field from docs/batch-ingestion.md with explicit types and source applicability.
+      - Manifest cardinality, status transitions, terminal states, and UTC timestamp format are documented and tested.
+      - Manifest serialization never includes configured secrets.
+      - Unit tests cover determinism, checksum chunking, validation, and status mapping.
+      - No network, PostgreSQL, or S3 connection occurs in unit tests or at import time.
+
+  - id: BI-020
+    title: Local Compose infrastructure
+    status: todo
+    depends_on: [BI-010]
+    scope:
+      - Add pinned PostgreSQL image and dxflrs/garage:v2.4.1.
+      - Add persistent volumes, readiness checks, and environment wiring.
+      - Add idempotent storage bootstrap.
+      - Add make up, down, logs, seed, and destructive reset targets.
+    acceptance:
+      - docker compose config passes.
+      - make up reaches ready state without arbitrary long sleeps.
+      - Garage data and PostgreSQL data survive down/up.
+      - make reset clearly warns and requires an explicit destructive target.
+      - Credentials are loaded from ignored .env values.
+
+  - id: BI-030
+    title: Shared S3 storage boundary
+    status: todo
+    depends_on: [BI-020]
+    scope:
+      - Implement configured path-style boto3 client construction.
+      - Implement deterministic immutable write and checksum verification.
+      - Implement copy-verify-delete movement.
+      - Implement payload-without-manifest reconciliation primitive.
+    acceptance:
+      - Core S3 operations pass against Garage.
+      - Rewriting identical content is idempotent.
+      - Existing different content at the same deterministic key is a conflict, not overwrite.
+      - Move failure leaves recoverable and documented state.
+      - Retries are bounded.
+
+  - id: BI-040
+    title: Deterministic source generators and fixtures
+    status: todo
+    depends_on: [BI-020]
+    scope:
+      - Add PostgreSQL source schema and deterministic seed.
+      - Add paginated mock REST API with fault injection.
+      - Generate valid and invalid CSV, JSON, and Parquet fixtures.
+    acceptance:
+      - Same seed produces byte-identical logical fixtures where format permits.
+      - Fault scenarios 429, permanent 500, malformed JSON, and partial pages are selectable.
+      - PostgreSQL orders include deterministic update timestamps for snapshot tests.
+      - Fixtures include empty, schema-invalid, mixed-row, same-name duplicate, and same-content renamed cases.
+
+  - id: BI-050
+    title: REST API ingestion and backfill
+    status: todo
+    depends_on: [BI-030, BI-040]
+    scope:
+      - Implement pagination, timeouts, bounded backoff, Retry-After, and error classification.
+      - Persist each raw page and a logical-run manifest.
+      - Resume partial runs and support inclusive date-range backfill.
+    acceptance:
+      - 429 then success is recovered within retry budget.
+      - Permanent 500 exhausts retry budget with explicit status.
+      - Permanent 4xx is not retried.
+      - Malformed page payload is preserved and failure is traceable.
+      - Repeated successful run/backfill creates no uncontrolled duplicate objects.
+
+  - id: BI-060
+    title: File ingestion
+    status: todo
+    depends_on: [BI-030, BI-040]
+    scope:
+      - Validate source, name, checksum, schema, required fields, types, duplicates, and emptiness.
+      - Record an ADR for whole-file reject versus accepted/rejected row split.
+      - Implement landing to archive or rejected flow.
+    acceptance:
+      - CSV, JSON, and Parquet happy paths pass.
+      - Invalid input is retained with machine-readable rejection reason.
+      - Same name duplicate and same content under a new name are distinguished.
+      - Mixed valid/invalid behavior matches the accepted atomicity ADR.
+      - Restart during copy/delete converges to the documented state.
+
+  - id: BI-070
+    title: PostgreSQL bounded snapshot ingestion
+    status: todo
+    depends_on: [BI-030, BI-040]
+    scope:
+      - Extract explicit columns using bounded pages or a server-side cursor.
+      - Capture consistent upper bound and watermark.
+      - Persist chunks without retaining the entire snapshot in memory.
+      - Resume safely after a connection interruption.
+    acceptance:
+      - No SELECT star exists in snapshot queries.
+      - Memory use is bounded by configured chunk size plus serialization overhead.
+      - Rows after the captured upper bound are excluded from the current batch.
+      - Restart does not corrupt or silently skip the logical snapshot.
+
+  - id: BI-080
+    title: Recovery demos and final documentation
+    status: todo
+    depends_on: [BI-050, BI-060, BI-070]
+    scope:
+      - Add explicit fault injection at required recovery boundaries.
+      - Add structured run summaries and demo Make targets.
+      - Document at least four failure exercises and recovery commands.
+      - Complete integration suite and clean-clone walkthrough.
+    acceptance:
+      - Demonstration commands from docs/batch-ingestion.md are implemented.
+      - Happy path completes in a few minutes on a local workstation.
+      - All mandatory failure scenarios have expected state and recovery command.
+      - Unit and integration suites pass.
+      - README matches actual commands and limitations.

@@ -1,0 +1,135 @@
+# Implementation plan
+
+This plan decomposes `docs/batch-ingestion.md` into small vertical tasks. **Possible extensions** are deliberately excluded.
+
+Exact task status, scope, dependencies, and acceptance criteria live only in `tasks/backlog.yaml`.
+
+## Ordering principle
+
+Implement stable pure contracts first, then infrastructure and the shared storage adapter, followed by individual ingestion paths. Backfill and recovery reuse already tested primitives.
+
+## Gate 0 — Foundation (`BI-000`)
+
+- coding-agent rules;
+- reproducible Python 3.12/uv toolchain;
+- task/state/worklog protocol;
+- Garage ADR;
+- baseline lint and test gates.
+
+Outcome: a new session can recover project state using repository files only.
+
+## Maintenance — Agent scaffolding audit (`BI-005`)
+
+- independent consistency review;
+- English-only repository-owned documentation;
+- reduced duplication between navigation, policy, state, and planning documents;
+- automated policy checks for language and active-task synchronization.
+
+Outcome: the agent workflow has explicit document ownership and drift checks.
+
+## Maintenance — Git initialization (`BI-006`)
+
+- initialize the repository on the `main` branch;
+- preserve ignore rules for secrets and local/generated state;
+- confirm `BI-010` as the first product implementation task.
+
+Outcome: version control is ready, while product implementation remains at the planned `BI-010` boundary.
+
+## Gate 1 — Core contracts (`BI-010`)
+
+- environment configuration without import-time I/O;
+- streaming SHA-256 checksum;
+- deterministic `batch_id` and object keys;
+- unique attempt `run_id`;
+- manifest schema and status transitions;
+- JSON structured-summary contract.
+
+Outcome: unit tests cover the key semantics without external services.
+
+## Gate 2 — Local infrastructure (`BI-020`)
+
+- Compose with a pinned PostgreSQL image and `dxflrs/garage:v2.4.1`;
+- persistent volumes;
+- health and readiness checks without arbitrary sleeps;
+- idempotent bucket/bootstrap flow;
+- `make up/down/reset`, with reset explicitly marked destructive.
+
+Outcome: a clean clone starts local dependencies and preserves data across restarts.
+
+## Gate 3 — Shared S3 boundary (`BI-030`)
+
+- path-style `boto3` client;
+- bounded retry policy;
+- immutable-write contract using a deterministic key and checksum verification;
+- `copy -> verify -> delete` primitive;
+- payload-without-manifest recovery;
+- S3 integration tests against Garage.
+
+Outcome: ingestion modules contain no duplicated S3 code.
+
+## Gate 4 — Deterministic sources (`BI-040`)
+
+- PostgreSQL schema and deterministic seed;
+- mock REST API with pagination, 429, 500, and malformed JSON scenarios;
+- CSV/JSON/Parquet fixtures, including invalid and duplicate cases.
+
+Outcome: every failure scenario is reproducible through an explicit command and seed.
+
+## Gate 5 — REST ingestion (`BI-050`)
+
+- timeouts and bounded exponential backoff;
+- `Retry-After` handling for 429;
+- terminal 4xx classification;
+- persistence of every raw page;
+- resume after a partial run;
+- manifests and date-range backfill.
+
+Outcome: integration tests cover happy path, retries, terminal failure, malformed responses, and repeated backfill.
+
+## Gate 6 — File ingestion (`BI-060`)
+
+- source/name/checksum/schema/required-field/type validation;
+- duplicate-name and duplicate-content handling;
+- documented file atomicity;
+- `landing -> archive | rejected`;
+- recovery between copy and delete.
+
+Outcome: valid, invalid, empty, mixed, and duplicate fixtures have a verifiable final state.
+
+## Gate 7 — PostgreSQL snapshot (`BI-070`)
+
+- explicit columns;
+- server-side cursor or bounded keyset pages;
+- consistent upper bound and watermark;
+- chunked output without retaining the full snapshot in memory;
+- restart after connection interruption.
+
+Outcome: snapshot and restart integration tests pass against seeded PostgreSQL.
+
+## Gate 8 — Recovery and demos (`BI-080`)
+
+- fault injection after payload/before manifest and after individual pages/chunks;
+- documented reconciliation and resume commands;
+- structured run summary;
+- Make targets from the demonstration scenario;
+- at least four failure exercises in the README.
+
+Outcome: the complete specification scenario is reproducible from a clean clone within a few minutes.
+
+## Common quality gates
+
+For every gate:
+
+```bash
+make lint
+make test
+```
+
+For tasks involving infrastructure:
+
+```bash
+docker compose config
+make integration
+```
+
+Do not advance to the next gate while required checks fail or semantic changes remain undocumented.

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/reliable-batch-ingestion/backlog.schema.json",
+  "title": "Reliable batch ingestion task backlog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project", "active_task_id", "status_values", "tasks"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project": {"type": "string", "minLength": 1},
+    "active_task_id": {
+      "description": "Task selected for next/current work; its status is todo or in_progress.",
+      "type": "string",
+      "pattern": "^BI-[0-9]{3}$"
+    },
+    "status_values": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["todo", "in_progress", "blocked", "done"]}
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/task"}
+    }
+  },
+  "$defs": {
+    "nonEmptyStringList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status", "depends_on", "scope", "acceptance"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^BI-[0-9]{3}$"},
+        "title": {"type": "string", "minLength": 1},
+        "status": {"enum": ["todo", "in_progress", "blocked", "done"]},
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^BI-[0-9]{3}$"}
+        },
+        "scope": {"$ref": "#/$defs/nonEmptyStringList"},
+        "acceptance": {"$ref": "#/$defs/nonEmptyStringList"}
+      }
+    }
+  }
+}
