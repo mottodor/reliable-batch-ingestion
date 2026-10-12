@@ -2,11 +2,12 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: the agent workflow and reproducible Python foundation are ready; ingestion is not implemented yet.
+> Current stage: deterministic configuration, checksum, identifier, manifest, and run-summary contracts are implemented; local infrastructure is next.
 
 ## Project references
 
 - Product requirements: [`docs/batch-ingestion.md`](docs/batch-ingestion.md)
+- Core deterministic contracts: [`docs/core-contracts.md`](docs/core-contracts.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
 - Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)
@@ -34,9 +35,9 @@ make setup
 make verify
 ```
 
-Docker is required for future infrastructure and integration tasks. The current foundation checks can run without a reachable Docker daemon.
+Docker is required for the next infrastructure task and later integration checks. The current core-contract tests perform no network, PostgreSQL, S3, or Compose access.
 
-## Available foundation commands
+## Available commands
 
 ```bash
 make help

@@ -30,3 +30,14 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `./scripts/doctor.sh` — PASS with one warning: the Docker daemon is unavailable from WSL.
 - `./scripts/verify.sh` — PASS: policy, locked sync, Ruff, mypy, and pytest (1 test).
 - Next task: `BI-010`.
+
+## 2026-10-12 — BI-010 core deterministic contracts
+
+- Added typed explicit environment configuration with redacted secret representations and no import-time I/O.
+- Added bounded streaming SHA-256, normalized logical identities, deterministic batch/object/manifest keys, and unique physical run IDs.
+- Added manifest schema version 1 with strict serialization, source nullability, UTC timestamps, lifecycle transitions, terminal states, and outcome mapping.
+- Added the structured run-summary contract and documented the initial identifier/object-key/manifest baseline in `docs/core-contracts.md`.
+- Added unit coverage for determinism, checksum chunking, configuration validation, manifest validation/statuses, and summaries.
+- `./scripts/verify.sh` — PASS: policy, locked sync, Ruff, mypy, and pytest (32 tests).
+- LSP/Pyright reported stale missing-import findings for new untracked modules; Ruff and strict mypy resolved the package and passed.
+- Next task: `BI-020`.

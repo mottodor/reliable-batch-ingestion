@@ -16,7 +16,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/batch_lab"]
+packages = ["src/batch_ingestion"]
 
 [dependency-groups]
 dev = [
@@ -37,8 +37,13 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["batch_lab"]
+packages = ["batch_ingestion"]
 mypy_path = ["src", "tests"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+include = ["src", "tests"]
+extraPaths = ["src"]
 
 [[tool.mypy.overrides]]
 module = ["pyarrow.*"]

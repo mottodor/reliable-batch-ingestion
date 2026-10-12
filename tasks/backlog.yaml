@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-010
+active_task_id: BI-020
 
 status_values:
   - todo
@@ -53,7 +53,7 @@ tasks:
 
   - id: BI-010
     title: Core deterministic contracts
-    status: todo
+    status: done
     depends_on: [BI-000]
     scope:
       - Add typed environment configuration without import-time I/O.
