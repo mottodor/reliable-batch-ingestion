@@ -63,3 +63,16 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, pytest (36 tests), and Compose configuration.
 - BI-020 remains incomplete: containers, lifecycle commands, bootstrap idempotency, persistence, and destructive reset have not been exercised.
 - Next task: BI-020 slice 2 bounded lifecycle/preflight commands and integration checks for service health, bucket access, and repeat bootstrap.
+
+## 2026-10-12 — BI-020 slice 2 bounded startup and bootstrap
+
+- Committed BI-020 slice 1 separately as `cca8019` (`feat: start BI-020 compose infrastructure`).
+- Added four lifecycle/preflight tests first and observed all four fail before implementation.
+- Added a redacting `.env` preflight that rejects missing values, placeholders, invalid ports, and a malformed Garage RPC secret without printing credential values.
+- Added bounded `make up`, non-destructive `make down`, `make logs`, infrastructure-only `make seed`, and repeated-bootstrap `make integration` targets.
+- Added integration checks for PostgreSQL queries, Garage `/health`, configured bucket access through boto3 path-style S3, and a checksummed sentinel retained across a second `make seed`.
+- `make up` — PASS: PostgreSQL and Garage reached healthy state within the 60-second wait budget.
+- `make integration` — PASS: three checks passed before and after repeat bootstrap; the sentinel remained byte-identical and accessible with the configured credentials.
+- LSP diagnostics for the three changed Python files — PASS with no findings.
+- BI-020 remains incomplete: ordinary down/up persistence and destructive-reset behavior are deferred to slice 3.
+- Next task: BI-020 slice 3 persistence and fail-closed destructive reset.

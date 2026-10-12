@@ -29,13 +29,26 @@ The **Possible extensions** section is outside the current scope.
 
 ```bash
 cp .env.example .env
+# Replace every change-me value and set GARAGE_RPC_SECRET to 64 hexadecimal characters.
 make doctor
 make policy
 make setup
 make verify
 ```
 
-Docker Compose is used by `make verify` to validate `compose.yaml` against `.env.example`; the default tests do not start containers or access PostgreSQL or S3. Lifecycle commands and integration startup checks are not implemented yet.
+`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
+
+## Local infrastructure
+
+```bash
+make up           # Start PostgreSQL and Garage; fail if not healthy within 60 seconds.
+make seed         # Idempotently ensure infrastructure bootstrap; no domain rows yet.
+make integration  # Check PostgreSQL, Garage /health, S3 bucket access, and repeat bootstrap.
+make logs         # Follow service logs until interrupted.
+make down         # Stop containers without deleting named volumes.
+```
+
+`make integration` creates a deterministic infrastructure sentinel in the configured bucket, reruns `make seed`, and verifies that the sentinel remains readable with the same credentials. Services remain running afterward. Persistence across `down/up` and the explicitly confirmed destructive-reset flow belong to the next BI-020 slice and are not yet claimed.
 
 ## Available commands
 
@@ -47,10 +60,16 @@ make setup
 make format
 make lint
 make test
+make check-local-env
+make up
+make down
+make logs
+make seed
+make integration
 make verify
 ```
 
-Commands such as `make up`, `make seed`, ingestion/demo targets, and integration tests will be added by their atomic tasks in `tasks/backlog.yaml`. This README does not promise commands before they exist.
+Ingestion and demonstration targets will be added by their atomic tasks in `tasks/backlog.yaml`. This README does not promise commands before they exist.
 
 ## Secrets
 

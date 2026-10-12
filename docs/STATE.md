@@ -4,7 +4,7 @@ Updated: 2026-10-12
 
 ## Current stage
 
-The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: its static Compose contract is complete, and bounded lifecycle/bootstrap work is next.
+The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: bounded startup and repeat bootstrap are verified, while persistence and destructive-reset work remains.
 
 ```yaml
 active_task_id: BI-020
@@ -26,17 +26,18 @@ last_completed_task_id: BI-010
 - the initial identifier, object-key, and manifest contracts are documented in `docs/core-contracts.md`;
 - unit tests exercise the contracts without network, PostgreSQL, S3, or Compose access;
 - BI-020 has a detailed implementation plan covering pinned images, configuration, bounded readiness, idempotent Garage bootstrap, persistence, lifecycle commands, destructive reset, tests, and documentation;
-- BI-020 slice 1 defines pinned PostgreSQL and Garage Compose services, separate named volumes, bounded healthchecks, secret-free Garage configuration, environment wiring, and static contract tests.
+- BI-020 slice 1 defines pinned PostgreSQL and Garage Compose services, separate named volumes, bounded healthchecks, secret-free Garage configuration, environment wiring, and static contract tests;
+- BI-020 slice 2 adds redacting `.env` preflight, bounded lifecycle commands, real PostgreSQL/Garage health checks, standard-S3 bucket access, and repeat-bootstrap sentinel verification.
 
 ## Not completed
 
-- operational Compose lifecycle/bootstrap and persistence checks for Garage and PostgreSQL;
+- BI-020 down/up persistence and explicitly confirmed destructive-reset checks;
 - the deterministic mock API;
 - the shared S3 storage boundary;
 - deterministic source generators and fixtures;
 - REST, file, and PostgreSQL ingestion;
 - backfill and recovery exercises;
-- integration tests and demo commands.
+- ingestion integration suites and demo commands.
 
 ## Known limitations and risks
 
@@ -53,9 +54,9 @@ last_completed_task_id: BI-010
 - locked dependency sync — PASS;
 - Ruff lint/format — PASS;
 - mypy — PASS;
-- pytest — PASS, 36 tests;
+- pytest — PASS, 40 unit/default tests;
 - Compose configuration with `.env.example` — PASS.
 
 ## Next atomic step
 
-Implement BI-020 slice 2 test-first: add bounded lifecycle/preflight commands and integration checks for PostgreSQL connectivity, Garage health, configured bucket access, and repeated idempotent bootstrap.
+Implement BI-020 slice 3 test-first: verify PostgreSQL and S3 markers across ordinary `make down/up`, then add fail-closed `make reset` and explicitly confirmed destructive volume removal.

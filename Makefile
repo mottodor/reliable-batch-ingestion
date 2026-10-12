@@ -1,7 +1,10 @@
 SHELL := /bin/bash
 UV ?= uv
+COMPOSE ?= docker compose
+COMPOSE_ENV_FILE ?= .env
+COMPOSE_WAIT_TIMEOUT_SECONDS ?= 60
 
-.PHONY: help doctor policy setup lock format lint test verify
+.PHONY: help doctor policy setup lock format lint test check-local-env up down logs seed integration verify
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -29,6 +32,26 @@ lint: ## Check formatting, lint, and static types
 
 test: ## Run tests that do not require external services
 	$(UV) run pytest -m 'not integration'
+
+check-local-env: ## Validate ignored local infrastructure configuration
+	@$(UV) run python scripts/check_local_env.py $(COMPOSE_ENV_FILE)
+
+up: check-local-env ## Start local services and wait up to the bounded readiness deadline
+	$(COMPOSE) --env-file $(COMPOSE_ENV_FILE) up --detach --wait --wait-timeout $(COMPOSE_WAIT_TIMEOUT_SECONDS)
+
+down: check-local-env ## Stop local services without deleting persistent volumes
+	$(COMPOSE) --env-file $(COMPOSE_ENV_FILE) down --remove-orphans
+
+logs: check-local-env ## Follow local service logs until interrupted
+	$(COMPOSE) --env-file $(COMPOSE_ENV_FILE) logs --follow
+
+seed: up ## Idempotently ensure infrastructure bootstrap and readiness
+	@printf 'Infrastructure bootstrap is ready; deterministic source data belongs to BI-040.\n'
+
+integration: seed ## Verify local infrastructure and repeated bootstrap against Compose
+	BI020_SENTINEL_MODE=create $(UV) run pytest tests/integration/test_infrastructure.py -m integration
+	$(MAKE) seed
+	BI020_SENTINEL_MODE=verify $(UV) run pytest tests/integration/test_infrastructure.py -m integration
 
 verify: ## Run the repository foundation quality gate
 	@./scripts/verify.sh
