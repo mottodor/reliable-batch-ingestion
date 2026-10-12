@@ -28,7 +28,7 @@ uv run pytest -m 'not integration'
 if [[ -f compose.yaml || -f compose.yml ]]; then
   printf '\n==> compose config\n'
   if docker compose version >/dev/null 2>&1; then
-    docker compose config --quiet
+    docker compose --env-file .env.example config --quiet
   else
     printf 'FAIL compose file exists, but Docker Compose is unavailable\n' >&2
     exit 1

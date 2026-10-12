@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic configuration, checksum, identifier, manifest, and run-summary contracts are implemented; local infrastructure is next.
+> Current stage: deterministic core contracts are implemented; BI-020 local Compose infrastructure is in progress.
 
 ## Project references
 
@@ -35,7 +35,7 @@ make setup
 make verify
 ```
 
-Docker is required for the next infrastructure task and later integration checks. The current core-contract tests perform no network, PostgreSQL, S3, or Compose access.
+Docker Compose is used by `make verify` to validate `compose.yaml` against `.env.example`; the default tests do not start containers or access PostgreSQL or S3. Lifecycle commands and integration startup checks are not implemented yet.
 
 ## Available commands
 

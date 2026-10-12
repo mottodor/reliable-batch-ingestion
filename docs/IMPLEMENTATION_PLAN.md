@@ -48,6 +48,8 @@ Outcome: unit tests cover the key semantics without external services.
 
 ## Gate 2 — Local infrastructure (`BI-020`)
 
+Detailed execution plan: [`docs/plans/BI-020.md`](plans/BI-020.md).
+
 - Compose with a pinned PostgreSQL image and `dxflrs/garage:v2.4.1`;
 - persistent volumes;
 - health and readiness checks without arbitrary sleeps;

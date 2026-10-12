@@ -4,7 +4,7 @@ Updated: 2026-10-12
 
 ## Current stage
 
-The deterministic core contracts are implemented and documented. The next gate is local Compose infrastructure.
+The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: its static Compose contract is complete, and bounded lifecycle/bootstrap work is next.
 
 ```yaml
 active_task_id: BI-020
@@ -24,11 +24,14 @@ last_completed_task_id: BI-010
 - manifest schema version 1 defines all required fields, source-specific nullability, one-to-one payload cardinality, UTC serialization, statuses, transitions, and terminal states;
 - the structured final run-summary contract contains every metric required by the product specification;
 - the initial identifier, object-key, and manifest contracts are documented in `docs/core-contracts.md`;
-- unit tests exercise the contracts without network, PostgreSQL, S3, or Compose access.
+- unit tests exercise the contracts without network, PostgreSQL, S3, or Compose access;
+- BI-020 has a detailed implementation plan covering pinned images, configuration, bounded readiness, idempotent Garage bootstrap, persistence, lifecycle commands, destructive reset, tests, and documentation;
+- BI-020 slice 1 defines pinned PostgreSQL and Garage Compose services, separate named volumes, bounded healthchecks, secret-free Garage configuration, environment wiring, and static contract tests.
 
 ## Not completed
 
-- Docker Compose for Garage, PostgreSQL, and the mock API;
+- operational Compose lifecycle/bootstrap and persistence checks for Garage and PostgreSQL;
+- the deterministic mock API;
 - the shared S3 storage boundary;
 - deterministic source generators and fixtures;
 - REST, file, and PostgreSQL ingestion;
@@ -50,8 +53,9 @@ last_completed_task_id: BI-010
 - locked dependency sync — PASS;
 - Ruff lint/format — PASS;
 - mypy — PASS;
-- pytest — PASS, 32 tests.
+- pytest — PASS, 36 tests;
+- Compose configuration with `.env.example` — PASS.
 
 ## Next atomic step
 
-Implement `BI-020`: add pinned local Compose infrastructure for Garage and PostgreSQL, readiness checks, persistent volumes, environment wiring, idempotent storage bootstrap, and explicit lifecycle/reset commands.
+Implement BI-020 slice 2 test-first: add bounded lifecycle/preflight commands and integration checks for PostgreSQL connectivity, Garage health, configured bucket access, and repeated idempotent bootstrap.

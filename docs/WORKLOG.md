@@ -41,3 +41,25 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `./scripts/verify.sh` — PASS: policy, locked sync, Ruff, mypy, and pytest (32 tests).
 - LSP/Pyright reported stale missing-import findings for new untracked modules; Ruff and strict mypy resolved the package and passed.
 - Next task: `BI-020`.
+
+## 2026-10-12 — BI-020 implementation planning
+
+- Refined BI-020 into verifiable scope and acceptance criteria while keeping it `todo` and active.
+- Added `docs/plans/BI-020.md` with fixed image, configuration, persistence, readiness, bootstrap, lifecycle, destructive-reset, test-first, documentation, and validation decisions.
+- Selected the available patch-level PostgreSQL image `postgres:17.6-bookworm`; retained ADR-mandated Garage `dxflrs/garage:v2.4.1`.
+- Based readiness and bootstrap planning on current Docker Compose and Garage documentation obtained through Context7.
+- Backlog JSON Schema validation — PASS.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, and pytest (32 tests).
+- Next task: start BI-020 slice 1 with static contract tests and valid Compose configuration; do not start services before that contract passes.
+
+## 2026-10-12 — BI-020 slice 1 static Compose contract
+
+- Committed completed BI-010 separately as `764205a` (`feat: add BI-010 deterministic core contracts`).
+- Marked BI-020 `in_progress` after first recording four failing static contract tests.
+- Added pinned PostgreSQL and Garage services, separate named volumes, bounded healthchecks, Garage single-node/default-bucket wiring, and a secret-free Garage configuration.
+- Extended `.env.example` with infrastructure ports and the required local Garage RPC secret placeholder.
+- Updated repository verification to render Compose with `.env.example`, without requiring or creating a real `.env`.
+- LSP diagnostics for the changed Python test — PASS with no findings.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, pytest (36 tests), and Compose configuration.
+- BI-020 remains incomplete: containers, lifecycle commands, bootstrap idempotency, persistence, and destructive reset have not been exercised.
+- Next task: BI-020 slice 2 bounded lifecycle/preflight commands and integration checks for service health, bucket access, and repeat bootstrap.

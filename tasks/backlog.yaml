@@ -75,19 +75,28 @@ tasks:
 
   - id: BI-020
     title: Local Compose infrastructure
-    status: todo
+    status: in_progress
     depends_on: [BI-010]
     scope:
-      - Add pinned PostgreSQL image and dxflrs/garage:v2.4.1.
-      - Add persistent volumes, readiness checks, and environment wiring.
-      - Add idempotent storage bootstrap.
-      - Add make up, down, logs, seed, and destructive reset targets.
+      - Add Compose services using postgres:17.6-bookworm and dxflrs/garage:v2.4.1; the mock API remains in BI-040.
+      - Add separate named volumes for PostgreSQL data, Garage metadata, and Garage object data.
+      - Reuse the typed POSTGRES_* and S3_* environment contract, with runtime credentials loaded from ignored .env values.
+      - Add bounded PostgreSQL and Garage healthchecks and wait for readiness without arbitrary sleeps.
+      - Bootstrap Garage single-node layout, configured access credentials, and the configured bucket idempotently.
+      - Add make up, down, logs, seed, integration, reset, and explicitly confirmed destructive-reset targets.
+      - Add bounded integration checks for service health, repeat bootstrap, down/up persistence, and reset behavior.
+      - Document local setup, lifecycle semantics, seed scope, health inspection, and destructive reset.
     acceptance:
-      - docker compose config passes.
-      - make up reaches ready state without arbitrary long sleeps.
-      - Garage data and PostgreSQL data survive down/up.
-      - make reset clearly warns and requires an explicit destructive target.
-      - Credentials are loaded from ignored .env values.
+      - docker compose --env-file .env.example config --quiet passes and only patch-level pinned images are used.
+      - make up requires ignored .env configuration and reaches healthy PostgreSQL and Garage services within an explicit timeout.
+      - Repeated make seed preserves the configured Garage bucket, credentials, and an existing sentinel object.
+      - PostgreSQL and Garage sentinel data survive make down followed by make up.
+      - make down never removes named volumes.
+      - make reset warns and exits without deleting data; volume deletion requires a separately named destructive target and an exact confirmation token.
+      - A confirmed destructive reset removes both services' persisted data, and the next startup recreates only the configured infrastructure.
+      - No committed file contains real credentials; runtime credentials come from ignored .env values.
+      - Infrastructure integration tests use the standard S3 API where applicable, use bounded waits, and pass against the local stack.
+      - README commands and behavior match the implemented lifecycle.
 
   - id: BI-030
     title: Shared S3 storage boundary
