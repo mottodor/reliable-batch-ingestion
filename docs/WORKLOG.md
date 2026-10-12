@@ -76,3 +76,14 @@ A concise append-only record of work sessions. The detailed current handoff live
 - LSP diagnostics for the three changed Python files — PASS with no findings.
 - BI-020 remains incomplete: ordinary down/up persistence and destructive-reset behavior are deferred to slice 3.
 - Next task: BI-020 slice 3 persistence and fail-closed destructive reset.
+
+## 2026-10-12 — BI-020 slice 3 planning
+
+- Confirmed slice 2 was already committed as `1a86704` and began from a clean work tree.
+- Expanded slice 3 into a test-first persistence, reset-guard, isolated destructive-recovery, and cleanup plan.
+- Reserved a dedicated Compose project for destructive integration so default developer volumes cannot be selected by the test harness.
+- Defined deterministic PostgreSQL and S3 marker states (`create`, `verify`, and `absent`) across ordinary down/up and confirmed volume deletion.
+- Defined fail-closed `make reset` behavior and the exact `CONFIRM=destroy-local-data` gate for the separately named destructive target.
+- Based project isolation and named-volume behavior on current `/docker/compose` documentation obtained through Context7.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, pytest (40 tests), and Compose configuration.
+- Next task: add the slice 3 reset-guard unit tests before implementing or executing destructive behavior.

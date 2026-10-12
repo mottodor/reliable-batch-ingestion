@@ -4,7 +4,7 @@ Updated: 2026-10-12
 
 ## Current stage
 
-The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: bounded startup and repeat bootstrap are verified, while persistence and destructive-reset work remains.
+The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: bounded startup and repeat bootstrap are verified, and slice 3 persistence/destructive-reset work is planned with an isolated-project safety boundary.
 
 ```yaml
 active_task_id: BI-020
@@ -59,4 +59,4 @@ last_completed_task_id: BI-010
 
 ## Next atomic step
 
-Implement BI-020 slice 3 test-first: verify PostgreSQL and S3 markers across ordinary `make down/up`, then add fail-closed `make reset` and explicitly confirmed destructive volume removal.
+Start BI-020 slice 3 test-first by adding failing unit tests for reset fail-closed behavior, exact confirmation, Compose project scoping, and `--volumes`; do not run destructive integration until those guards pass.
