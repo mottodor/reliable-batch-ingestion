@@ -1,6 +1,6 @@
 # Deterministic source contracts
 
-This document describes only source behavior that currently exists. BI-040 remains in progress: PostgreSQL SQL, live mock HTTP routes, and generated CSV/JSON/Parquet files are deferred to later slices.
+This document describes only source behavior that currently exists. BI-040 remains in progress: deterministic PostgreSQL materialization and the live mock HTTP source are implemented, while generated CSV/JSON/Parquet files are deferred to slice 4.
 
 ## Seed contract
 
@@ -68,7 +68,54 @@ total_amount
 updated_at
 ```
 
-`total_amount` is a `Decimal` with two fractional digits. Timestamps use the same fixed UTC sequence as shipping statuses. Slice 2 will express this contract as versioned PostgreSQL schema and transactional seed SQL.
+`total_amount` is a `Decimal` with two fractional digits. Timestamps use the same fixed UTC sequence as shipping statuses.
+
+## PostgreSQL order source
+
+The ordered scripts `postgres/init/001_omni_retail_schema.sql` and `002_seed_orders.sql` are applied explicitly by `make seed`; they are not one-time container initialization hooks. The schema script safely creates `omni_retail.orders`, finite-value and non-negative checks, the unique UTC watermark, and the `(updated_at, order_id)` index required by future bounded snapshot extraction. It also defines the deterministic SHA-256 derivation helper used to reproduce the pure Python order generator.
+
+The seed script uses an explicit insert column list and runs as one transaction with `ON_ERROR_STOP`. It validates the selected seed through a constrained temporary parameter row, truncates only `omni_retail.orders`, and inserts 24 rows ordered by stable ordinal. It never uses `SELECT *`, changes the BI-020 probe table, or accesses Garage.
+
+Use the default seed or choose another valid value explicitly:
+
+```bash
+make seed
+make seed SOURCE_SEED=20260901
+```
+
+`SOURCE_SEED` is validated before Compose or `psql` is invoked. The Make target passes the validated value to `psql` as a variable, and SQL consumes it through the quoted-literal form `:'source_seed'`; it is not interpolated into SQL text by the shell. Any validation or SQL failure returns non-zero. Repeating the default command yields the same row count, ordered digest, UTC bounds, and row bytes at the logical-value level. A different valid seed changes generated values without changing the table schema. Existing unrelated PostgreSQL rows and S3 objects are retained.
+
+## Mock REST API
+
+Compose builds `mock-api` from the pinned `python:3.12.12-slim-bookworm` image with no added runtime dependency. The service listens on container port `8080`, publishes `MOCK_API_PORT`, validates `SOURCE_SEED` before binding, and uses a bounded `/health` check. It imports only the pure seed helper and mock source package; it does not connect to PostgreSQL, S3, or the public network.
+
+The versioned resources are:
+
+```text
+GET /v1/fx-rates
+GET /v1/shipping-statuses
+```
+
+Both require exactly one `source_date`, `page`, and `page_size` query value. `source_date` is canonical ISO `YYYY-MM-DD`; page values are positive ASCII integers; `page_size` is limited to `100`. Unknown routes and invalid, duplicate, unexpected, or out-of-range parameters produce canonical permanent `4xx` JSON. Successful UTF-8 bodies end with LF, use sorted JSON keys and compact separators, and contain `source`, `source_date`, `page`, `page_size`, `total_pages`, `total_records`, `next_page`, and stably ordered `items`.
+
+The optional `scenario` parameter defaults to `happy`:
+
+- `happy` returns every valid page normally;
+- `rate_limit_once` requires `scenario_key`; the first request for that validated key returns `429` and `Retry-After: 1`, then later requests succeed;
+- `permanent_500` always returns the same canonical `500` body;
+- `malformed_json` requires `fault_page`; only that page returns status `200`, JSON content type, and the fixed malformed body;
+- `partial_pages` requires `fault_page >= 2`; earlier pages succeed and the selected page repeatedly returns the same `500` body.
+
+Scenario keys match `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`. The threaded server protects fault state with a lock and retains at most 128 keys; a new key at capacity receives a deterministic `503` rather than evicting an existing key and replaying its one-time fault. Health, permanent, malformed, and partial requests do not consume transient state.
+
+The local-only control route resets one key or every key without changing generated records:
+
+```text
+POST /__control/reset?scenario_key=<key>
+POST /__control/reset
+```
+
+Tests and exercises must use unique keys or reset them explicitly. Restarting the service also clears transient counters, while identical seed/resource queries retain byte-identical successful response bodies.
 
 ### Supplier prices
 
@@ -88,9 +135,12 @@ Prices are positive integer minor units. This avoids float-dependent representat
 
 For the same code, seed, and source date, the pure record tuples and their ordering are exact. Unit tests also pin representative default-seed values so an algorithm change is explicit.
 
+The PostgreSQL source now reproduces the pure order records exactly for the same seed and fixed source date. Integration coverage compares explicit ordered rows and their SHA-256 digest across repeated runs, verifies unique ascending UTC watermarks, changes seed without changing schema, proves invalid input leaves state unchanged, and restores the default seed afterward.
+
+Mock API successful pages and deterministic error/fault bodies are byte-stable for the same implementation, seed, and request. Transport-added headers such as HTTP `Date` are not part of the byte-stability contract. Live tests traverse both resources, exercise every fault, and compare a successful page across a bounded service restart.
+
 The following byte-level guarantees are not implemented yet:
 
-- HTTP response serialization belongs to BI-040 slice 3;
 - CSV, JSON, and Parquet serialization belongs to BI-040 slice 4;
 - committed fixture checksums do not exist yet.
 

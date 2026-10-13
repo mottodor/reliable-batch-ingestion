@@ -164,3 +164,27 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `make lint` and `make test` — PASS; 96 default tests passed and 8 integration tests were deselected.
 - Backlog JSON Schema validation and `./scripts/verify.sh` — PASS, including strict mypy over `src`, `mock_api`, and tests plus Compose configuration.
 - Next task: start BI-040 slice 2 with failing PostgreSQL schema/seed static and command tests.
+
+## 2026-10-13 — BI-040 slice 2 repeatable PostgreSQL source
+
+- Added seven PostgreSQL contract/command tests first and observed all fail before the versioned SQL and seed command existed.
+- Added an idempotent `omni_retail.orders` schema with explicit columns, finite-value/non-negative constraints, unique UTC watermark, and `(updated_at, order_id)` snapshot index.
+- Added a transaction-scoped seed script that reproduces the pure SHA-256-derived 24-order dataset, consumes a quoted `psql` variable, and replaces only the controlled orders table.
+- Extended `make seed SOURCE_SEED=<integer>` to validate before Compose/`psql`, preserve bounded infrastructure startup, apply ordered SQL with `ON_ERROR_STOP`, and propagate failures.
+- Added live PostgreSQL evidence for same-seed row/digest equality, pure-generator parity, unique ordered UTC timestamps, alternate-seed variation with stable schema, invalid-seed isolation, unchanged BI-020 marker state, and default-seed restoration.
+- LSP diagnostics, `make lint`, `make test` (103 passed), Compose configuration, explicit default seeding, `make integration` (9 initial integration tests plus recovery checks), and `./scripts/verify.sh` — PASS.
+- BI-040 remains in progress; the mock API and fixture corpus are not implemented.
+- Next task: BI-040 slice 3 mock API pagination and bounded deterministic faults, starting with failing pure request/response tests.
+
+## 2026-10-13 — BI-040 slice 3 paginated mock API and faults
+
+- Added pure request/response tests for strict bounded pagination, canonical page bytes, deterministic 4xx responses, every planned fault, reset/isolation, thread safety, and bounded retained fault keys.
+- Added four container/Compose contract tests first and observed all fail before the pinned image, build exclusions, service configuration, and environment values existed.
+- Implemented a standard-library `ThreadingHTTPServer` transport over a socket-free pure contract, with structured request logs and no PostgreSQL, S3, public-network, or import-time connection behavior.
+- Added a non-root `python:3.12.12-slim-bookworm` image, secret-excluding Docker context, configurable host port, explicit seed, and bounded healthcheck under the existing Compose wait deadline.
+- Implemented canonical pages for FX rates and shipping statuses plus isolated `429 -> success`, permanent `500`, exact malformed JSON, repeatable partial-page failure, and one/all-key reset operations.
+- Bounded transient state to 128 validated keys without eviction, protected transitions with a lock, and returned deterministic `503` at capacity.
+- Added four live HTTP tests with explicit `httpx` timeouts covering both resources, all faults, reset behavior, deterministic 4xx responses, and byte equality after a bounded service restart.
+- LSP diagnostics, Compose configuration, pinned image build, `make lint`, `make test` (132 passed), focused integration, `make integration` (13 initial integration tests plus recovery checks), and `./scripts/verify.sh` — PASS.
+- BI-040 remains in progress; supplier fixture generation is not implemented.
+- Next task: BI-040 slice 4 supplier CSV/JSON/Parquet corpus, starting with failing scenario-matrix and cross-format equality tests.

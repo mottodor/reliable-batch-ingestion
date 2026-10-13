@@ -26,11 +26,11 @@ def test_compose_uses_exact_images_and_named_persistence() -> None:
 def test_compose_has_bounded_healthchecks_and_default_bucket_bootstrap() -> None:
     compose = COMPOSE_PATH.read_text(encoding="utf-8")
 
-    assert compose.count("healthcheck:") == 2
+    assert compose.count("healthcheck:") == 3
     assert "pg_isready" in compose
     assert '["CMD", "/garage", "status"]' in compose
-    assert compose.count("timeout: 5s") == 2
-    assert compose.count("retries: 12") == 2
+    assert compose.count("timeout: 5s") == 3
+    assert compose.count("retries: 12") == 3
     assert 'command: ["/garage", "server", "--single-node", "--default-bucket"]' in compose
     assert "GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY:?" in compose
     assert "GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_KEY:?" in compose

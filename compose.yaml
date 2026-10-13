@@ -43,6 +43,28 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  mock-api:
+    build:
+      context: .
+      dockerfile: mock_api/Dockerfile
+    environment:
+      SOURCE_SEED: ${SOURCE_SEED:-20260901}
+    ports:
+      - "127.0.0.1:${MOCK_API_PORT:-8080}:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=2).read()",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   garage_metadata:

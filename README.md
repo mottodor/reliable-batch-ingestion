@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic core contracts, local Compose infrastructure, the shared S3 boundary, and BI-040 slice 1 pure source-record generators are implemented; database/API/file materialization remains next.
+> Current stage: deterministic core contracts, local Compose infrastructure, the shared S3 boundary, and BI-040 slices 1–3 deterministic PostgreSQL and mock API sources are implemented; supplier fixtures remain next.
 
 ## Project references
 
@@ -38,20 +38,40 @@ make setup
 make verify
 ```
 
-`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. The preflight also requires positive `S3_TOTAL_MAX_ATTEMPTS`, `S3_CONNECT_TIMEOUT_SECONDS`, and `S3_READ_TIMEOUT_SECONDS` values. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
+`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. The preflight also validates `MOCK_API_PORT` and requires positive `S3_TOTAL_MAX_ATTEMPTS`, `S3_CONNECT_TIMEOUT_SECONDS`, and `S3_READ_TIMEOUT_SECONDS` values. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
 
 ## Local infrastructure
 
 ```bash
-make up           # Start PostgreSQL and Garage; fail if not healthy within 60 seconds.
-make seed         # Idempotently ensure infrastructure bootstrap; no domain rows yet.
+make up           # Start PostgreSQL, Garage, and the mock API; fail if unhealthy within 60 seconds.
+make seed         # Start services and replace OmniRetail orders with the default deterministic seed.
 make integration  # Check bootstrap plus isolated down/up and destructive recovery.
 make logs         # Follow service logs until interrupted.
 make down         # Stop containers without deleting named volumes.
 make reset        # Refuse implicit deletion and print the confirmed command.
 ```
 
-`make integration` verifies the shared storage boundary against Garage, creates deterministic PostgreSQL and S3 markers, verifies repeat bootstrap, and runs down/up plus destructive-recovery checks in the dedicated `reliable-batch-ingestion-bi020-reset-test` Compose project. Storage checks cover immutable replay/conflict, metadata-preserving move recovery, payload-without-manifest reconciliation, and a bounded deterministic unavailable-endpoint scenario. Temporary credentials and ports are not persisted, all waits are bounded, isolated resources are removed in cleanup, and the default project's volumes are compared before and after the exercise. The default services remain running afterward.
+`make seed` validates `SOURCE_SEED` before starting Compose, applies the ordered SQL files under `postgres/init/`, and transactionally replaces only `omni_retail.orders`. The default is `20260901`; select another valid seed explicitly with `make seed SOURCE_SEED=<integer>`. A repeated seed produces the same 24 explicit-column rows, while invalid seed text fails before Compose or PostgreSQL is invoked. Existing Garage objects, the BI-020 PostgreSQL marker, and unrelated database objects are preserved.
+
+`make integration` verifies the shared storage boundary against Garage, deterministic PostgreSQL reseeding, the mock API happy path and fault scenarios, unchanged infrastructure markers, repeat bootstrap, and down/up plus destructive-recovery checks in the dedicated `reliable-batch-ingestion-bi020-reset-test` Compose project. Storage checks cover immutable replay/conflict, metadata-preserving move recovery, payload-without-manifest reconciliation, and a bounded deterministic unavailable-endpoint scenario. Temporary credentials and ports are not persisted, all waits are bounded, isolated resources are removed in cleanup, and the default project's volumes are compared before and after the exercise. The default services remain running afterward with the default source seed restored.
+
+### Mock API
+
+The Compose-hosted API uses `SOURCE_SEED=20260901` by default and publishes the configured `MOCK_API_PORT` on host loopback only. Both resources require `source_date`, `page`, and `page_size`:
+
+```text
+GET http://localhost:8080/v1/fx-rates?source_date=2026-09-01&page=1&page_size=2
+GET http://localhost:8080/v1/shipping-statuses?source_date=2026-09-01&page=1&page_size=5
+```
+
+Selectable scenarios are `happy`, `rate_limit_once`, `permanent_500`, `malformed_json`, and `partial_pages`. `rate_limit_once` also requires a unique `scenario_key`; malformed and partial scenarios require `fault_page`. Reset one transient key or all keys with the local-only control operation:
+
+```text
+POST http://localhost:8080/__control/reset?scenario_key=<key>
+POST http://localhost:8080/__control/reset
+```
+
+The counter store is thread-safe and bounded to 128 keys. Successful page bodies are canonical and byte-stable for the same seed and request; restarting the service clears only transient fault counters. Exact query and fault semantics are documented in [`docs/source-contracts.md`](docs/source-contracts.md).
 
 All lifecycle targets are scoped to `COMPOSE_PROJECT_NAME` (default: `reliable-batch-ingestion`). Normal `make down` preserves the three named volumes. Destructive reset is intentionally a separate, irreversible command and requires the exact confirmation token:
 
@@ -70,6 +90,7 @@ docker compose --project-name reliable-batch-ingestion --env-file .env ps
 docker compose --project-name reliable-batch-ingestion --env-file .env exec garage /garage status
 docker compose --project-name reliable-batch-ingestion --env-file .env exec postgres \
   sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+python3 -c 'import urllib.request; urllib.request.urlopen("http://localhost:8080/health", timeout=2).read()'
 ```
 
 ## Shared S3 boundary

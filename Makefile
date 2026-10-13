@@ -4,6 +4,8 @@ COMPOSE ?= docker compose
 COMPOSE_ENV_FILE ?= .env
 COMPOSE_PROJECT_NAME ?= reliable-batch-ingestion
 COMPOSE_WAIT_TIMEOUT_SECONDS ?= 60
+SOURCE_SEED ?= 20260901
+export SOURCE_SEED
 
 .PHONY: help doctor policy setup lock format lint test check-local-env up down logs seed integration reset reset-destructive verify
 
@@ -46,8 +48,12 @@ down: check-local-env ## Stop local services without deleting persistent volumes
 logs: check-local-env ## Follow local service logs until interrupted
 	$(COMPOSE) --project-name $(COMPOSE_PROJECT_NAME) --env-file $(COMPOSE_ENV_FILE) logs --follow
 
-seed: up ## Idempotently ensure infrastructure bootstrap and readiness
-	@printf 'Infrastructure bootstrap is ready; deterministic source data belongs to BI-040.\n'
+seed: ## Start infrastructure, then transactionally replace deterministic OmniRetail orders
+	@$(UV) run python scripts/validate_source_seed.py
+	$(MAKE) up
+	$(COMPOSE) --project-name $(COMPOSE_PROJECT_NAME) --env-file $(COMPOSE_ENV_FILE) exec -T postgres sh -c 'exec psql -X --username "$$POSTGRES_USER" --dbname "$$POSTGRES_DB" --set=ON_ERROR_STOP=on' < postgres/init/001_omni_retail_schema.sql
+	$(COMPOSE) --project-name $(COMPOSE_PROJECT_NAME) --env-file $(COMPOSE_ENV_FILE) exec -T -e SOURCE_SEED postgres sh -c 'exec psql -X --username "$$POSTGRES_USER" --dbname "$$POSTGRES_DB" --set=ON_ERROR_STOP=on "$$@"' seed-orders "--set=source_seed=$$SOURCE_SEED" < postgres/init/002_seed_orders.sql
+	@printf 'Deterministic OmniRetail orders seeded with SOURCE_SEED=%s.\n' "$$SOURCE_SEED"
 
 integration: seed ## Verify storage contracts, bootstrap, persistence, and recovery
 	BI020_MARKER_MODE=create $(UV) run pytest tests/integration -m integration

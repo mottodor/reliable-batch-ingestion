@@ -23,6 +23,7 @@ S3_CONNECT_TIMEOUT_SECONDS=2
 S3_READ_TIMEOUT_SECONDS=5
 GARAGE_ADMIN_PORT=3903
 GARAGE_RPC_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+MOCK_API_PORT=8080
 """
 
 
@@ -58,6 +59,20 @@ def test_preflight_rejects_missing_s3_retry_budget(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "S3_TOTAL_MAX_ATTEMPTS" in result.stderr
+
+
+def test_preflight_rejects_missing_or_invalid_mock_api_port(tmp_path: Path) -> None:
+    for index, replacement in enumerate(("", "MOCK_API_PORT=0\n", "MOCK_API_PORT=invalid\n")):
+        env_path = tmp_path / f"mock-api-port-{index}.env"
+        env_path.write_text(
+            VALID_INFRASTRUCTURE_ENV.replace("MOCK_API_PORT=8080\n", replacement),
+            encoding="utf-8",
+        )
+
+        result = _run_preflight(env_path)
+
+        assert result.returncode == 1
+        assert "MOCK_API_PORT" in result.stderr
 
 
 def test_preflight_rejects_invalid_s3_retry_and_timeout_bounds(tmp_path: Path) -> None:
@@ -117,7 +132,8 @@ def test_make_targets_use_preflight_and_bounded_compose_wait() -> None:
     assert "up: check-local-env" in makefile
     assert "--project-name $(COMPOSE_PROJECT_NAME)" in makefile
     assert "--detach --wait --wait-timeout $(COMPOSE_WAIT_TIMEOUT_SECONDS)" in makefile
-    assert "seed: up" in makefile
+    assert "seed:" in makefile
+    assert "$(MAKE) up" in makefile
     assert "integration: seed" in makefile
     assert "BI020_MARKER_MODE=create" in makefile
     assert "BI020_MARKER_MODE=verify" in makefile

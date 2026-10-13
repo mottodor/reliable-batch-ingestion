@@ -76,7 +76,7 @@ def _available_ports(count: int) -> list[int]:
 
 
 def _write_isolated_env(base_values: Mapping[str, str], path: Path) -> None:
-    postgres_port, s3_port, admin_port = _available_ports(3)
+    postgres_port, s3_port, admin_port, mock_api_port = _available_ports(4)
     values = dict(base_values)
     values.update(
         {
@@ -85,6 +85,8 @@ def _write_isolated_env(base_values: Mapping[str, str], path: Path) -> None:
             "S3_ENDPOINT_URL": f"http://localhost:{s3_port}",
             "S3_PORT": str(s3_port),
             "GARAGE_ADMIN_PORT": str(admin_port),
+            "MOCK_API_BASE_URL": f"http://localhost:{mock_api_port}",
+            "MOCK_API_PORT": str(mock_api_port),
         }
     )
     serialized = "".join(f"{name}={value}\n" for name, value in sorted(values.items()))
