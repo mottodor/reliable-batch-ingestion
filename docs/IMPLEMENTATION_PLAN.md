@@ -73,6 +73,8 @@ Outcome: ingestion modules contain no duplicated S3 code.
 
 ## Gate 4 — Deterministic sources (`BI-040`)
 
+Detailed execution plan: [`docs/plans/BI-040.md`](plans/BI-040.md).
+
 - PostgreSQL schema and deterministic seed;
 - mock REST API with pagination, 429, 500, and malformed JSON scenarios;
 - CSV/JSON/Parquet fixtures, including invalid and duplicate cases.

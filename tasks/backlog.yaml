@@ -120,17 +120,22 @@ tasks:
 
   - id: BI-040
     title: Deterministic source generators and fixtures
-    status: todo
+    status: in_progress
     depends_on: [BI-020]
     scope:
-      - Add PostgreSQL source schema and deterministic seed.
-      - Add paginated mock REST API with fault injection.
-      - Generate valid and invalid CSV, JSON, and Parquet fixtures.
+      - Define one validated SOURCE_SEED contract and deterministic, time-independent OmniRetail record generation.
+      - Add versioned PostgreSQL order schema and transactional repeatable seed SQL, invoked explicitly by make seed.
+      - Add a Compose-hosted paginated mock REST API for FX rates and shipping statuses with isolated bounded fault injection.
+      - Generate and commit valid, empty, schema-invalid, mixed-row, same-name duplicate, and renamed-content CSV, JSON, and Parquet fixtures.
+      - Document source schemas, seed behavior, fault selection, fixture byte-stability boundaries, and regeneration commands.
     acceptance:
-      - Same seed produces byte-identical logical fixtures where format permits.
-      - Fault scenarios 429, permanent 500, malformed JSON, and partial pages are selectable.
-      - PostgreSQL orders include deterministic update timestamps for snapshot tests.
-      - Fixtures include empty, schema-invalid, mixed-row, same-name duplicate, and same-content renamed cases.
+      - SOURCE_SEED=20260901 reproduces the same ordered logical records for PostgreSQL, API, and supplier sources; invalid seeds fail before state changes and a different seed changes data without changing schemas.
+      - Applying the PostgreSQL seed twice produces the same explicit-column row count and ordered digest, with unique deterministic UTC updated_at values suitable for bounded snapshot tests.
+      - The mock API exposes bounded pagination for FX rates and shipping statuses and returns byte-stable successful pages for the same seed and request.
+      - Selectable live fault scenarios prove 429 then success with Retry-After, permanent 500, deterministic malformed JSON, and successful pages before a repeatable partial-run failure.
+      - The committed corpus includes valid, empty, and schema-invalid CSV, JSON, and Parquet plus a mixed-row fixture, same-name duplicate deliveries, and byte-identical renamed content.
+      - Two temporary generations and the committed default corpus have identical path sets, lengths, checksums, and bytes under the locked toolchain; parsed valid rows and schemas agree across formats.
+      - Mock API startup, health, HTTP calls, seed execution, and integration waits are bounded; unit and integration tests use no public network and do not alter unrelated PostgreSQL or S3 state.
 
   - id: BI-050
     title: REST API ingestion and backfill

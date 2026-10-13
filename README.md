@@ -2,13 +2,14 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic core contracts, local Compose infrastructure, and the shared S3 storage boundary are implemented; deterministic source fixtures are next.
+> Current stage: deterministic core contracts, local Compose infrastructure, the shared S3 boundary, and BI-040 slice 1 pure source-record generators are implemented; database/API/file materialization remains next.
 
 ## Project references
 
 - Product requirements: [`docs/batch-ingestion.md`](docs/batch-ingestion.md)
 - Core deterministic contracts: [`docs/core-contracts.md`](docs/core-contracts.md)
 - Shared S3 storage contract: [`docs/storage-contract.md`](docs/storage-contract.md)
+- Deterministic source contracts: [`docs/source-contracts.md`](docs/source-contracts.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
 - Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)

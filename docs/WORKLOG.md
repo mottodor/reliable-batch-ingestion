@@ -140,3 +140,27 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `make integration` — PASS for 8 initial infrastructure/storage tests, repeat bootstrap, isolated persistence/reset/recovery, and cleanup.
 - Backlog JSON Schema validation and `./scripts/verify.sh` — PASS; BI-030 is done and BI-040 is active.
 - Next task: plan BI-040 deterministic source generators and fixtures test-first.
+
+## 2026-10-13 — BI-040 implementation planning
+
+- Refined BI-040 scope and acceptance criteria while keeping it active and `todo`.
+- Added `docs/plans/BI-040.md` with one canonical seed, versioned PostgreSQL schema/seed behavior, paginated API contracts, bounded fault scenarios, supplier fixture schemas, duplicate cases, and byte-stability boundaries.
+- Selected a standard-library mock server in a Compose-built `python:3.12.12-slim-bookworm` image, avoiding a new runtime dependency; the patch-level image tag was verified as available.
+- Defined five test-first slices and explicit evidence for same-seed PostgreSQL digests, API page bytes/faults, cross-format fixture rows, regeneration checks, and bounded local operation.
+- Based PostgreSQL, Compose, and Parquet planning on current `/websites/postgresql_17`, `/docker/compose`, and `/apache/arrow` Context7 documentation.
+- Backlog JSON Schema validation and repository policy checks — PASS.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, 72 default tests, and Compose configuration.
+- Next task: start BI-040 slice 1 with failing seed-validation and deterministic-record tests, then add only the minimum pure generators.
+
+## 2026-10-13 — BI-040 slice 1 deterministic source records
+
+- Added the source-generation contract tests first and observed collection fail because the planned modules did not exist; the completed slice now has 24 focused tests.
+- Added strict ASCII/range validation for `SOURCE_SEED`, canonical SHA-256 field derivation, and a shared deterministic order-ID contract without environment, clock, random-state, or I/O access.
+- Added typed pure generators for four FX rates, 12 shipping statuses, 24 PostgreSQL-shaped orders, and 15 supplier prices with explicit schemas, stable ordering, fixed UTC watermarks, and pinned reference values.
+- Added the typed root `mock_api` package to Hatch, Ruff, mypy, Pyright, Make, and repository verification coverage without adding a runtime dependency.
+- Documented the implemented seed/record contracts and the future HTTP, fixture-byte, and cross-PyArrow-version reproducibility boundaries in `docs/source-contracts.md`.
+- Marked BI-040 `in_progress`; slices 2–5 remain unimplemented.
+- LSP diagnostics — PASS; narrowly scoped Pyright ignores cover its stale new-module cache while strict mypy resolves and checks all imports.
+- `make lint` and `make test` — PASS; 96 default tests passed and 8 integration tests were deselected.
+- Backlog JSON Schema validation and `./scripts/verify.sh` — PASS, including strict mypy over `src`, `mock_api`, and tests plus Compose configuration.
+- Next task: start BI-040 slice 2 with failing PostgreSQL schema/seed static and command tests.

@@ -20,7 +20,7 @@ printf '\n==> ruff format check\n'
 uv run ruff format --check .
 
 printf '\n==> mypy\n'
-uv run mypy src tests
+uv run mypy src mock_api tests
 
 printf '\n==> unit/default tests\n'
 uv run pytest -m 'not integration'

@@ -29,7 +29,7 @@ format: ## Apply Ruff formatting and safe lint fixes
 lint: ## Check formatting, lint, and static types
 	$(UV) run ruff check .
 	$(UV) run ruff format --check .
-	$(UV) run mypy src tests
+	$(UV) run mypy src mock_api tests
 
 test: ## Run tests that do not require external services
 	$(UV) run pytest -m 'not integration'

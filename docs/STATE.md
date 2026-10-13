@@ -4,7 +4,7 @@ Updated: 2026-10-13
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, and BI-030 shared S3 boundary are implemented and documented. The next gate is deterministic source generators and fixtures.
+The deterministic core contracts, BI-020 local Compose infrastructure, and BI-030 shared S3 boundary are implemented and documented. BI-040 is in progress: slice 1 pure deterministic source records is complete, while source materialization remains unimplemented.
 
 ```yaml
 active_task_id: BI-040
@@ -34,12 +34,15 @@ last_completed_task_id: BI-030
 - immutable writes stream and verify actual bytes, accept identical replay, and reject different content without overwrite;
 - S3 movement converges source-only, both-identical, and destination-only states through copy, byte/metadata verification, then delete;
 - payload/manifest reconciliation reports absent, payload-only, complete, and manifest-only states and rejects corrupt or conflicting pairs;
-- the shared storage contract, Garage integration checks, and deterministic bounded-endpoint failure test are documented and passing.
+- the shared storage contract, Garage integration checks, and deterministic bounded-endpoint failure test are documented and passing;
+- BI-040 has a detailed test-first plan fixing the source seed, PostgreSQL order schema/seed semantics, paginated mock API and faults, supplier fixture schemas/scenarios, byte-stability boundaries, and validation matrix;
+- BI-040 slice 1 validates one bounded source seed and provides typed, pure, time-independent generators for FX rates, shipping statuses, orders, and supplier prices with stable schemas, ordering, UTC watermarks, and representative reference values.
 
 ## Not completed
 
-- the deterministic mock API;
-- deterministic source generators and fixtures;
+- the versioned PostgreSQL source schema and transactional seed;
+- the live paginated mock API and its fault scenarios;
+- serialized CSV, JSON, and Parquet fixture files;
 - REST, file, and PostgreSQL ingestion;
 - backfill and recovery exercises;
 - ingestion integration suites and demo commands.
@@ -52,15 +55,15 @@ last_completed_task_id: BI-030
 
 ## Latest validation
 
-2026-10-13, BI-030 acceptance validation:
+2026-10-13, BI-040 slice 1:
 
-- LSP diagnostics for all changed Python files — PASS with no findings;
-- `make lint` — PASS;
-- `make test` — PASS, 72 unit/default tests;
-- storage integration — PASS, 4 Garage/fault-endpoint tests;
-- `make integration` — PASS, including all 8 initial infrastructure/storage tests, repeat bootstrap, isolated persistence, reset guards, destructive recovery, and cleanup;
-- backlog JSON Schema validation and `./scripts/verify.sh` — PASS.
+- test-first evidence — the new source-generation suite initially failed at collection because the planned modules did not exist;
+- LSP diagnostics for all changed Python files — PASS with no findings after narrowly scoped ignores for the session's stale new-module import cache; strict mypy resolves and checks those imports;
+- `make lint` — PASS, including Ruff formatting/lint and strict mypy over `src`, `mock_api`, and tests;
+- `make test` — PASS, 96 default tests including 24 source-generation tests; 8 integration tests deselected;
+- backlog JSON Schema validation and `./scripts/verify.sh` — PASS, including Compose configuration;
+- integration tests — NOT RUN because slice 1 is pure and performs no database, HTTP, S3, or Compose I/O.
 
 ## Next atomic step
 
-Plan BI-040 test-first, fixing deterministic seeds, source schemas, mock API fault scenarios, fixture byte-stability rules, and acceptance commands before implementation.
+Start BI-040 slice 2 by adding failing static and command tests for the versioned PostgreSQL order schema, quoted seed variable, transactional repeatability, and fail-before-change seed validation.
