@@ -87,3 +87,18 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Based project isolation and named-volume behavior on current `/docker/compose` documentation obtained through Context7.
 - `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, pytest (40 tests), and Compose configuration.
 - Next task: add the slice 3 reset-guard unit tests before implementing or executing destructive behavior.
+
+## 2026-10-13 — BI-020 slice 3 persistence and destructive reset
+
+- Added reset/project-scoping tests first and observed four expected failures before implementation.
+- Made every Compose lifecycle command explicit about project name and environment file.
+- Added fail-closed `make reset` and a separately implemented `make reset-destructive` that requires the exact `CONFIRM=destroy-local-data` token before invoking Compose.
+- Added deterministic PostgreSQL and S3 marker modes for `create`, `verify`, and `absent` states without using `SELECT *` or overwriting an existing S3 sentinel.
+- Added a bounded recovery harness using temporary ports/configuration and the dedicated `reliable-batch-ingestion-bi020-reset-test` project.
+- Verified both markers across ordinary down/up, verified failed reset attempts preserved them, removed all three isolated volumes after exact confirmation, and verified a clean restart recreated infrastructure without prior markers.
+- Verified the default project's volume fingerprints were unchanged and isolated containers/volumes were removed in `finally` cleanup.
+- `make integration` — PASS: default repeat-bootstrap checks and all isolated persistence/reset/recovery states passed.
+- `make lint` — PASS; `make test` — PASS with 43 tests and 4 integration tests deselected.
+- LSP diagnostics for all four changed Python files — PASS with no findings.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, pytest (43 tests), and Compose configuration.
+- Next task: BI-020 slice 4 operator-documentation review, full acceptance validation, and task closeout.

@@ -1,10 +1,10 @@
 # Project state
 
-Updated: 2026-10-12
+Updated: 2026-10-13
 
 ## Current stage
 
-The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: bounded startup and repeat bootstrap are verified, and slice 3 persistence/destructive-reset work is planned with an isolated-project safety boundary.
+The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: startup, repeat bootstrap, down/up persistence, and isolated destructive recovery are verified; operator closeout remains.
 
 ```yaml
 active_task_id: BI-020
@@ -27,11 +27,12 @@ last_completed_task_id: BI-010
 - unit tests exercise the contracts without network, PostgreSQL, S3, or Compose access;
 - BI-020 has a detailed implementation plan covering pinned images, configuration, bounded readiness, idempotent Garage bootstrap, persistence, lifecycle commands, destructive reset, tests, and documentation;
 - BI-020 slice 1 defines pinned PostgreSQL and Garage Compose services, separate named volumes, bounded healthchecks, secret-free Garage configuration, environment wiring, and static contract tests;
-- BI-020 slice 2 adds redacting `.env` preflight, bounded lifecycle commands, real PostgreSQL/Garage health checks, standard-S3 bucket access, and repeat-bootstrap sentinel verification.
+- BI-020 slice 2 adds redacting `.env` preflight, bounded lifecycle commands, real PostgreSQL/Garage health checks, standard-S3 bucket access, and repeat-bootstrap sentinel verification;
+- BI-020 slice 3 adds project-scoped lifecycle commands, PostgreSQL/S3 persistence markers, fail-closed reset guards, exact destructive confirmation, and isolated down/up plus destructive-recovery verification.
 
 ## Not completed
 
-- BI-020 down/up persistence and explicitly confirmed destructive-reset checks;
+- BI-020 operator-documentation review and task closeout;
 - the deterministic mock API;
 - the shared S3 storage boundary;
 - deterministic source generators and fixtures;
@@ -47,16 +48,17 @@ last_completed_task_id: BI-010
 
 ## Latest validation
 
-2026-10-12, `./scripts/verify.sh` — PASS:
+2026-10-13, `./scripts/verify.sh` — PASS:
 
 - doctor — PASS with no warnings;
 - repository policy — PASS;
 - locked dependency sync — PASS;
 - Ruff lint/format — PASS;
 - mypy — PASS;
-- pytest — PASS, 40 unit/default tests;
-- Compose configuration with `.env.example` — PASS.
+- pytest — PASS, 43 unit/default tests;
+- Compose configuration with `.env.example` — PASS;
+- separate `make integration` — PASS for repeat bootstrap, isolated down/up persistence, reset guards, destructive volume removal, clean re-bootstrap, and cleanup.
 
 ## Next atomic step
 
-Start BI-020 slice 3 test-first by adding failing unit tests for reset fail-closed behavior, exact confirmation, Compose project scoping, and `--volumes`; do not run destructive integration until those guards pass.
+Complete BI-020 slice 4: review operator documentation against actual commands, run the full acceptance matrix, close BI-020, and advance the active backlog task only if every criterion passes.

@@ -43,12 +43,21 @@ make verify
 ```bash
 make up           # Start PostgreSQL and Garage; fail if not healthy within 60 seconds.
 make seed         # Idempotently ensure infrastructure bootstrap; no domain rows yet.
-make integration  # Check PostgreSQL, Garage /health, S3 bucket access, and repeat bootstrap.
+make integration  # Check bootstrap plus isolated down/up and destructive recovery.
 make logs         # Follow service logs until interrupted.
 make down         # Stop containers without deleting named volumes.
+make reset        # Refuse implicit deletion and print the confirmed command.
 ```
 
-`make integration` creates a deterministic infrastructure sentinel in the configured bucket, reruns `make seed`, and verifies that the sentinel remains readable with the same credentials. Services remain running afterward. Persistence across `down/up` and the explicitly confirmed destructive-reset flow belong to the next BI-020 slice and are not yet claimed.
+`make integration` creates deterministic PostgreSQL and S3 markers, verifies repeat bootstrap, and runs down/up plus destructive-recovery checks in the dedicated `reliable-batch-ingestion-bi020-reset-test` Compose project. Its temporary credentials and ports are not persisted, all waits are bounded, isolated resources are removed in cleanup, and the default project's volumes are compared before and after the exercise. The default services remain running afterward.
+
+Normal `make down` preserves the three named volumes. Destructive reset is intentionally a separate, irreversible command and requires the exact confirmation token:
+
+```bash
+make reset-destructive CONFIRM=destroy-local-data
+```
+
+This deletes PostgreSQL data, Garage metadata, and Garage object data for the selected `COMPOSE_PROJECT_NAME`. Missing or incorrect confirmation fails before Compose is invoked.
 
 ## Available commands
 
@@ -66,6 +75,8 @@ make down
 make logs
 make seed
 make integration
+make reset
+make reset-destructive CONFIRM=destroy-local-data
 make verify
 ```
 

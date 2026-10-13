@@ -1,5 +1,6 @@
 """Integration checks for the BI-020 PostgreSQL and Garage services."""
 
+import hashlib
 import os
 from collections.abc import Iterator, Mapping
 from contextlib import closing
@@ -21,6 +22,10 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SENTINEL_KEY = "_infrastructure/bi020-bootstrap-sentinel.txt"
 SENTINEL_BODY = b"BI-020 bootstrap persistence sentinel\n"
 SENTINEL_SHA256 = "b3ced96ccf85f2a526ec7f93c7ad9b84944838abb70a882830a7bd89c3d19923"
+POSTGRES_MARKER_TABLE = "bi020_infrastructure_probe"
+POSTGRES_MARKER_ID = "persistence-marker"
+POSTGRES_MARKER_VALUE = "BI-020 PostgreSQL persistence marker"
+POSTGRES_MARKER_SHA256 = hashlib.sha256(POSTGRES_MARKER_VALUE.encode()).hexdigest()
 
 
 def _load_dotenv(path: Path) -> dict[str, str]:
@@ -38,7 +43,11 @@ def _load_dotenv(path: Path) -> dict[str, str]:
 
 @pytest.fixture(scope="session")
 def environment() -> Mapping[str, str]:
-    return _load_dotenv(REPOSITORY_ROOT / ".env")
+    configured_path = Path(os.environ.get("BI020_ENV_FILE", ".env"))
+    env_path = (
+        configured_path if configured_path.is_absolute() else REPOSITORY_ROOT / configured_path
+    )
+    return _load_dotenv(env_path)
 
 
 @pytest.fixture(scope="session")
@@ -81,6 +90,58 @@ def test_postgres_accepts_queries(app_config: AppConfig) -> None:
         assert cursor.fetchone() == (1,)
 
 
+def test_postgres_persistence_marker(app_config: AppConfig) -> None:
+    marker_mode = os.environ.get("BI020_MARKER_MODE", "create")
+    if marker_mode not in {"create", "verify", "absent"}:
+        raise ValueError("BI020_MARKER_MODE must be 'create', 'verify', or 'absent'")
+
+    with (
+        psycopg.connect(
+            host=app_config.postgres.host,
+            port=app_config.postgres.port,
+            dbname=app_config.postgres.database,
+            user=app_config.postgres.user,
+            password=app_config.postgres.password,
+            connect_timeout=5,
+        ) as connection,
+        connection.cursor() as cursor,
+    ):
+        if marker_mode == "absent":
+            cursor.execute("SELECT to_regclass(%s)", (f"public.{POSTGRES_MARKER_TABLE}",))
+            assert cursor.fetchone() == (None,)
+            return
+
+        if marker_mode == "create":
+            cursor.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {POSTGRES_MARKER_TABLE} (
+                    marker_id text PRIMARY KEY,
+                    marker_value text NOT NULL,
+                    checksum_sha256 char(64) NOT NULL
+                )
+                """
+            )
+            cursor.execute(
+                f"""
+                INSERT INTO {POSTGRES_MARKER_TABLE}
+                    (marker_id, marker_value, checksum_sha256)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (marker_id) DO NOTHING
+                """,
+                (POSTGRES_MARKER_ID, POSTGRES_MARKER_VALUE, POSTGRES_MARKER_SHA256),
+            )
+
+        cursor.execute(
+            f"""
+            SELECT marker_value, checksum_sha256
+            FROM {POSTGRES_MARKER_TABLE}
+            WHERE marker_id = %s
+            """,
+            (POSTGRES_MARKER_ID,),
+        )
+        assert cursor.fetchone() == (POSTGRES_MARKER_VALUE, POSTGRES_MARKER_SHA256)
+
+
 def test_garage_admin_health(environment: Mapping[str, str]) -> None:
     admin_port = int(environment["GARAGE_ADMIN_PORT"])
 
@@ -113,10 +174,16 @@ def test_configured_bucket_and_bootstrap_sentinel(
 ) -> None:
     bucket = app_config.storage.bucket
     s3_client.head_bucket(Bucket=bucket)
-    sentinel_mode = os.environ.get("BI020_SENTINEL_MODE", "create")
+    marker_mode = os.environ.get("BI020_MARKER_MODE", "create")
+    if marker_mode not in {"create", "verify", "absent"}:
+        raise ValueError("BI020_MARKER_MODE must be 'create', 'verify', or 'absent'")
     content = _read_sentinel(s3_client, bucket)
 
-    if sentinel_mode == "create" and content is None:
+    if marker_mode == "absent":
+        assert content is None
+        return
+
+    if marker_mode == "create" and content is None:
         s3_client.put_object(
             Bucket=bucket,
             Key=SENTINEL_KEY,
@@ -125,9 +192,7 @@ def test_configured_bucket_and_bootstrap_sentinel(
             Metadata={"sha256": SENTINEL_SHA256},
         )
         content = _read_sentinel(s3_client, bucket)
-    elif sentinel_mode not in {"create", "verify"}:
-        raise ValueError("BI020_SENTINEL_MODE must be 'create' or 'verify'")
 
     if content is None:
-        pytest.fail(f"bootstrap sentinel is unavailable in {sentinel_mode} mode")
+        pytest.fail(f"bootstrap sentinel is unavailable in {marker_mode} mode")
     assert content == SENTINEL_BODY
