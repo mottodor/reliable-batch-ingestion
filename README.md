@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic core contracts are implemented; BI-020 local Compose infrastructure is in progress.
+> Current stage: deterministic core contracts and local Compose infrastructure are implemented; the shared S3 boundary is next.
 
 ## Project references
 
@@ -51,13 +51,24 @@ make reset        # Refuse implicit deletion and print the confirmed command.
 
 `make integration` creates deterministic PostgreSQL and S3 markers, verifies repeat bootstrap, and runs down/up plus destructive-recovery checks in the dedicated `reliable-batch-ingestion-bi020-reset-test` Compose project. Its temporary credentials and ports are not persisted, all waits are bounded, isolated resources are removed in cleanup, and the default project's volumes are compared before and after the exercise. The default services remain running afterward.
 
-Normal `make down` preserves the three named volumes. Destructive reset is intentionally a separate, irreversible command and requires the exact confirmation token:
+All lifecycle targets are scoped to `COMPOSE_PROJECT_NAME` (default: `reliable-batch-ingestion`). Normal `make down` preserves the three named volumes. Destructive reset is intentionally a separate, irreversible command and requires the exact confirmation token:
 
 ```bash
 make reset-destructive CONFIRM=destroy-local-data
 ```
 
 This deletes PostgreSQL data, Garage metadata, and Garage object data for the selected `COMPOSE_PROJECT_NAME`. Missing or incorrect confirmation fails before Compose is invoked.
+
+### Health inspection
+
+After `make up`, inspect the same health commands used by Compose:
+
+```bash
+docker compose --project-name reliable-batch-ingestion --env-file .env ps
+docker compose --project-name reliable-batch-ingestion --env-file .env exec garage /garage status
+docker compose --project-name reliable-batch-ingestion --env-file .env exec postgres \
+  sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
 
 ## Available commands
 

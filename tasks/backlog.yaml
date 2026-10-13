@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-020
+active_task_id: BI-030
 
 status_values:
   - todo
@@ -75,7 +75,7 @@ tasks:
 
   - id: BI-020
     title: Local Compose infrastructure
-    status: in_progress
+    status: done
     depends_on: [BI-010]
     scope:
       - Add Compose services using postgres:17.6-bookworm and dxflrs/garage:v2.4.1; the mock API remains in BI-040.

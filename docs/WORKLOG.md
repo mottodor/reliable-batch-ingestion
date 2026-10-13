@@ -102,3 +102,17 @@ A concise append-only record of work sessions. The detailed current handoff live
 - LSP diagnostics for all four changed Python files — PASS with no findings.
 - `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, pytest (43 tests), and Compose configuration.
 - Next task: BI-020 slice 4 operator-documentation review, full acceptance validation, and task closeout.
+
+## 2026-10-13 — BI-020 slice 4 acceptance closeout
+
+- Committed BI-020 slice 3 separately as `4a8f4eb` (`feat: add BI-020 persistence recovery checks`).
+- Reviewed README lifecycle, health, persistence, integration, and destructive-reset instructions against the implemented Make targets and added verified health-inspection commands.
+- Ran `make up` and two explicit `make seed` executions; both services remained healthy and the configured bucket credentials/sentinel stayed usable.
+- `make integration` — PASS for default repeat bootstrap and isolated ordinary down/up, reset guards, confirmed volume deletion, clean re-bootstrap, protected-volume comparison, and cleanup.
+- Verified default PostgreSQL and S3 markers after a real `make down`/`make up`, then verified them again after `make reset`, missing confirmation, and wrong confirmation all failed closed.
+- Verified all three default named volumes survived normal shutdown; isolated containers and volumes were absent after recovery cleanup.
+- Ran the documented Compose `ps`, Garage status, and PostgreSQL `pg_isready` commands successfully.
+- Scanned tracked files against the actual ignored `.env` credential values — PASS; `.env` is not tracked.
+- Marked BI-020 done, selected BI-030 as the active task, and synchronized `docs/STATE.md`.
+- Backlog JSON Schema validation and `./scripts/verify.sh` — PASS; verify covered doctor, policy, locked sync, Ruff, mypy, 43 default tests, and Compose configuration.
+- Next task: start BI-030 with tests for path-style boto3 client configuration and immutable-write conflicts.

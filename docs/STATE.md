@@ -4,11 +4,11 @@ Updated: 2026-10-13
 
 ## Current stage
 
-The deterministic core contracts are implemented and documented. BI-020 local Compose infrastructure is in progress: startup, repeat bootstrap, down/up persistence, and isolated destructive recovery are verified; operator closeout remains.
+The deterministic core contracts and BI-020 local Compose infrastructure are implemented and documented. The next gate is the shared S3 storage boundary.
 
 ```yaml
-active_task_id: BI-020
-last_completed_task_id: BI-010
+active_task_id: BI-030
+last_completed_task_id: BI-020
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -28,13 +28,13 @@ last_completed_task_id: BI-010
 - BI-020 has a detailed implementation plan covering pinned images, configuration, bounded readiness, idempotent Garage bootstrap, persistence, lifecycle commands, destructive reset, tests, and documentation;
 - BI-020 slice 1 defines pinned PostgreSQL and Garage Compose services, separate named volumes, bounded healthchecks, secret-free Garage configuration, environment wiring, and static contract tests;
 - BI-020 slice 2 adds redacting `.env` preflight, bounded lifecycle commands, real PostgreSQL/Garage health checks, standard-S3 bucket access, and repeat-bootstrap sentinel verification;
-- BI-020 slice 3 adds project-scoped lifecycle commands, PostgreSQL/S3 persistence markers, fail-closed reset guards, exact destructive confirmation, and isolated down/up plus destructive-recovery verification.
+- BI-020 slice 3 adds project-scoped lifecycle commands, PostgreSQL/S3 persistence markers, fail-closed reset guards, exact destructive confirmation, and isolated down/up plus destructive-recovery verification;
+- BI-020 operator commands and limitations are documented, and its complete acceptance matrix passes against local Compose services.
 
 ## Not completed
 
-- BI-020 operator-documentation review and task closeout;
-- the deterministic mock API;
 - the shared S3 storage boundary;
+- the deterministic mock API;
 - deterministic source generators and fixtures;
 - REST, file, and PostgreSQL ingestion;
 - backfill and recovery exercises;
@@ -57,8 +57,9 @@ last_completed_task_id: BI-010
 - mypy — PASS;
 - pytest — PASS, 43 unit/default tests;
 - Compose configuration with `.env.example` — PASS;
-- separate `make integration` — PASS for repeat bootstrap, isolated down/up persistence, reset guards, destructive volume removal, clean re-bootstrap, and cleanup.
+- separate `make integration` — PASS for repeat bootstrap, isolated down/up persistence, reset guards, destructive volume removal, clean re-bootstrap, protected-volume comparison, and cleanup;
+- default-project down/up marker verification, documented health commands, fail-closed reset checks, and tracked runtime-credential scan — PASS.
 
 ## Next atomic step
 
-Complete BI-020 slice 4: review operator documentation against actual commands, run the full acceptance matrix, close BI-020, and advance the active backlog task only if every criterion passes.
+Start BI-030 test-first: define the configured path-style boto3 client contract and immutable-write failure cases before implementing shared S3 operations.
