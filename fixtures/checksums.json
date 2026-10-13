@@ -1,0 +1,175 @@
+{
+  "files": [
+    {
+      "byte_length": 65,
+      "checksum_sha256": "0db8086b9d51178d87479c4991d248b80c2927d9336195c59c8f7546b8f5ca58",
+      "format": "csv",
+      "path": "supplier-prices/canonical/empty.csv",
+      "scenario": "empty"
+    },
+    {
+      "byte_length": 3,
+      "checksum_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "format": "json",
+      "path": "supplier-prices/canonical/empty.json",
+      "scenario": "empty"
+    },
+    {
+      "byte_length": 900,
+      "checksum_sha256": "52fdf73c69d07b0e47954d63c2a8f531d40ed456b940af235fb9b515211d9b29",
+      "format": "parquet",
+      "path": "supplier-prices/canonical/empty.parquet",
+      "scenario": "empty"
+    },
+    {
+      "byte_length": 175,
+      "checksum_sha256": "04efa8e457f035c675c2fb1761b64a337cc529d4109faeeed651168d7c6b1786",
+      "format": "csv",
+      "path": "supplier-prices/canonical/mixed.csv",
+      "scenario": "mixed"
+    },
+    {
+      "byte_length": 476,
+      "checksum_sha256": "e728d27080cae6a28163be7d1f4ad8c984bb8857d453eef69091ec32c9241bc3",
+      "format": "json",
+      "path": "supplier-prices/canonical/mixed.json",
+      "scenario": "mixed"
+    },
+    {
+      "byte_length": 1215,
+      "checksum_sha256": "6925572f5272139b3bfb05b20fff6df2ba5f851bf5d710de52c4837c255c8f80",
+      "format": "parquet",
+      "path": "supplier-prices/canonical/mixed.parquet",
+      "scenario": "mixed"
+    },
+    {
+      "byte_length": 123,
+      "checksum_sha256": "c126c63b5d626fbeb822d8ffeb06dabb47e8c53ee299728cf982250137a24fe9",
+      "format": "csv",
+      "path": "supplier-prices/canonical/schema_invalid.csv",
+      "scenario": "schema_invalid"
+    },
+    {
+      "byte_length": 274,
+      "checksum_sha256": "86e833ab15c1e86440f9d2714131d1563b2e6421054b4f7f43d28d00a3844778",
+      "format": "json",
+      "path": "supplier-prices/canonical/schema_invalid.json",
+      "scenario": "schema_invalid"
+    },
+    {
+      "byte_length": 997,
+      "checksum_sha256": "57837d368ab268b68fb20a5faffdd9c7bf2900c14f7dbeea8c58c83e0f3c41a2",
+      "format": "parquet",
+      "path": "supplier-prices/canonical/schema_invalid.parquet",
+      "scenario": "schema_invalid"
+    },
+    {
+      "byte_length": 632,
+      "checksum_sha256": "9e97174cbc43aef5f3277a9e5142991d472c742d55a150a100051d9794893d2f",
+      "format": "csv",
+      "path": "supplier-prices/canonical/valid.csv",
+      "scenario": "valid"
+    },
+    {
+      "byte_length": 2385,
+      "checksum_sha256": "8cbcc70dff1b315481695663e4037593135fbd74fa34f91dd2a894571d5a25cd",
+      "format": "json",
+      "path": "supplier-prices/canonical/valid.json",
+      "scenario": "valid"
+    },
+    {
+      "byte_length": 1740,
+      "checksum_sha256": "d62a7c4054d50b89af69a1657fba50d1cfe247fa3643ffa5e5b873a181685bc7",
+      "format": "parquet",
+      "path": "supplier-prices/canonical/valid.parquet",
+      "scenario": "valid"
+    },
+    {
+      "byte_length": 632,
+      "checksum_sha256": "9e97174cbc43aef5f3277a9e5142991d472c742d55a150a100051d9794893d2f",
+      "format": "csv",
+      "path": "supplier-prices/renamed-content/supplier-prices-original-2026-09-01.csv",
+      "scenario": "renamed_content"
+    },
+    {
+      "byte_length": 2385,
+      "checksum_sha256": "8cbcc70dff1b315481695663e4037593135fbd74fa34f91dd2a894571d5a25cd",
+      "format": "json",
+      "path": "supplier-prices/renamed-content/supplier-prices-original-2026-09-01.json",
+      "scenario": "renamed_content"
+    },
+    {
+      "byte_length": 1740,
+      "checksum_sha256": "d62a7c4054d50b89af69a1657fba50d1cfe247fa3643ffa5e5b873a181685bc7",
+      "format": "parquet",
+      "path": "supplier-prices/renamed-content/supplier-prices-original-2026-09-01.parquet",
+      "scenario": "renamed_content"
+    },
+    {
+      "byte_length": 632,
+      "checksum_sha256": "9e97174cbc43aef5f3277a9e5142991d472c742d55a150a100051d9794893d2f",
+      "format": "csv",
+      "path": "supplier-prices/renamed-content/supplier-prices-renamed-2026-09-01.csv",
+      "scenario": "renamed_content"
+    },
+    {
+      "byte_length": 2385,
+      "checksum_sha256": "8cbcc70dff1b315481695663e4037593135fbd74fa34f91dd2a894571d5a25cd",
+      "format": "json",
+      "path": "supplier-prices/renamed-content/supplier-prices-renamed-2026-09-01.json",
+      "scenario": "renamed_content"
+    },
+    {
+      "byte_length": 1740,
+      "checksum_sha256": "d62a7c4054d50b89af69a1657fba50d1cfe247fa3643ffa5e5b873a181685bc7",
+      "format": "parquet",
+      "path": "supplier-prices/renamed-content/supplier-prices-renamed-2026-09-01.parquet",
+      "scenario": "renamed_content"
+    },
+    {
+      "byte_length": 632,
+      "checksum_sha256": "9e97174cbc43aef5f3277a9e5142991d472c742d55a150a100051d9794893d2f",
+      "format": "csv",
+      "path": "supplier-prices/same-name-delivery-a/supplier-prices-2026-09-01.csv",
+      "scenario": "same_name_duplicate"
+    },
+    {
+      "byte_length": 2385,
+      "checksum_sha256": "8cbcc70dff1b315481695663e4037593135fbd74fa34f91dd2a894571d5a25cd",
+      "format": "json",
+      "path": "supplier-prices/same-name-delivery-a/supplier-prices-2026-09-01.json",
+      "scenario": "same_name_duplicate"
+    },
+    {
+      "byte_length": 1740,
+      "checksum_sha256": "d62a7c4054d50b89af69a1657fba50d1cfe247fa3643ffa5e5b873a181685bc7",
+      "format": "parquet",
+      "path": "supplier-prices/same-name-delivery-a/supplier-prices-2026-09-01.parquet",
+      "scenario": "same_name_duplicate"
+    },
+    {
+      "byte_length": 632,
+      "checksum_sha256": "9e97174cbc43aef5f3277a9e5142991d472c742d55a150a100051d9794893d2f",
+      "format": "csv",
+      "path": "supplier-prices/same-name-delivery-b/supplier-prices-2026-09-01.csv",
+      "scenario": "same_name_duplicate"
+    },
+    {
+      "byte_length": 2385,
+      "checksum_sha256": "8cbcc70dff1b315481695663e4037593135fbd74fa34f91dd2a894571d5a25cd",
+      "format": "json",
+      "path": "supplier-prices/same-name-delivery-b/supplier-prices-2026-09-01.json",
+      "scenario": "same_name_duplicate"
+    },
+    {
+      "byte_length": 1740,
+      "checksum_sha256": "d62a7c4054d50b89af69a1657fba50d1cfe247fa3643ffa5e5b873a181685bc7",
+      "format": "parquet",
+      "path": "supplier-prices/same-name-delivery-b/supplier-prices-2026-09-01.parquet",
+      "scenario": "same_name_duplicate"
+    }
+  ],
+  "fixture_schema_version": 1,
+  "seed": 20260901,
+  "source_date": "2026-09-01"
+}

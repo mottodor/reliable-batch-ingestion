@@ -1,0 +1,23 @@
+[
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0001",
+    "price_minor_units": 23251,
+    "currency": "GBP",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0004",
+    "price_minor_units": 0,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0007",
+    "price_minor_units": 38403,
+    "currency": "USD",
+    "effective_date": "2026-09-01"
+  }
+]

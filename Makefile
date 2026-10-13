@@ -7,7 +7,7 @@ COMPOSE_WAIT_TIMEOUT_SECONDS ?= 60
 SOURCE_SEED ?= 20260901
 export SOURCE_SEED
 
-.PHONY: help doctor policy setup lock format lint test check-local-env up down logs seed integration reset reset-destructive verify
+.PHONY: help doctor policy setup lock format lint test fixtures fixtures-check check-local-env up down logs seed integration reset reset-destructive verify
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -35,6 +35,12 @@ lint: ## Check formatting, lint, and static types
 
 test: ## Run tests that do not require external services
 	$(UV) run pytest -m 'not integration'
+
+fixtures: ## Regenerate the committed supplier corpus for SOURCE_SEED
+	$(UV) run python scripts/generate_fixtures.py --output fixtures
+
+fixtures-check: ## Compare two regenerations with the committed supplier corpus
+	$(UV) run python scripts/check_fixtures.py --committed fixtures
 
 check-local-env: ## Validate ignored local infrastructure configuration
 	@$(UV) run python scripts/check_local_env.py $(COMPOSE_ENV_FILE)

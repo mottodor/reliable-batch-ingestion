@@ -1,0 +1,107 @@
+[
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0001",
+    "price_minor_units": 23251,
+    "currency": "GBP",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0004",
+    "price_minor_units": 9600,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0007",
+    "price_minor_units": 38403,
+    "currency": "USD",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0010",
+    "price_minor_units": 49600,
+    "currency": "GBP",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-001",
+    "product_id": "SKU-0013",
+    "price_minor_units": 24732,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "product_id": "SKU-0002",
+    "price_minor_units": 23069,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "product_id": "SKU-0005",
+    "price_minor_units": 30998,
+    "currency": "USD",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "product_id": "SKU-0008",
+    "price_minor_units": 48609,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "product_id": "SKU-0011",
+    "price_minor_units": 4595,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-002",
+    "product_id": "SKU-0014",
+    "price_minor_units": 4497,
+    "currency": "USD",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "product_id": "SKU-0003",
+    "price_minor_units": 27445,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "product_id": "SKU-0006",
+    "price_minor_units": 30701,
+    "currency": "GBP",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "product_id": "SKU-0009",
+    "price_minor_units": 39767,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "product_id": "SKU-0012",
+    "price_minor_units": 26279,
+    "currency": "USD",
+    "effective_date": "2026-09-01"
+  },
+  {
+    "supplier_id": "SUP-003",
+    "product_id": "SKU-0015",
+    "price_minor_units": 43455,
+    "currency": "EUR",
+    "effective_date": "2026-09-01"
+  }
+]

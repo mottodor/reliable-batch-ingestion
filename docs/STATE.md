@@ -4,11 +4,11 @@ Updated: 2026-10-13
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, and BI-030 shared S3 boundary are implemented and documented. BI-040 is in progress: slices 1–3 provide pure deterministic records, repeatable PostgreSQL orders, and a live paginated mock API with bounded fault injection; the supplier fixture corpus remains unimplemented.
+The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, and BI-040 deterministic source generators and fixtures are implemented and documented. BI-050 REST API ingestion and backfill is selected as the next task.
 
 ```yaml
-active_task_id: BI-040
-last_completed_task_id: BI-030
+active_task_id: BI-050
+last_completed_task_id: BI-040
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -40,11 +40,14 @@ last_completed_task_id: BI-030
 - BI-040 slice 2 adds ordered versioned PostgreSQL schema/seed SQL, explicit order constraints and snapshot index, pre-state-change seed validation, quoted `psql` variables, and transactional replacement of only `omni_retail.orders`;
 - repeated default PostgreSQL seeds reproduce the 24 pure generated rows and ordered digest, alternate seeds change values without changing schema, invalid seeds preserve state, and BI-020 marker data remains unchanged;
 - BI-040 slice 3 adds a non-root Compose-built standard-library mock API with canonical bounded pages for FX rates and shipping statuses, deterministic 4xx responses, and byte-stable bodies across repeat requests and service restart;
-- fault injection now covers isolated thread-safe `429 -> success`, permanent `500`, exact malformed JSON, and repeatable partial-page failure, with validated keys, deterministic reset operations, and a fail-closed 128-key state bound.
+- fault injection now covers isolated thread-safe `429 -> success`, permanent `500`, exact malformed JSON, and repeatable partial-page failure, with validated keys, deterministic reset operations, and a fail-closed 128-key state bound;
+- BI-040 slice 4 commits valid, empty, schema-invalid, and mixed supplier-price fixtures in CSV, JSON, and Parquet with equal cross-format valid rows and explicit stable schemas;
+- same-name redelivery and renamed-content cases exist in every format as byte-identical copies without assigning future BI-060 outcomes;
+- the sorted checksum index covers all 24 payloads, and `make fixtures-check` validates two temporary generations against committed paths, bytes, lengths, checksums, schemas, rows, and scenario relationships;
+- BI-040 source schemas, seed behavior, mock fault controls, fixture layout, regeneration commands, and reproducibility boundaries are documented, and the full offline plus live Compose acceptance matrix passes.
 
 ## Not completed
 
-- serialized CSV, JSON, and Parquet fixture files;
 - REST, file, and PostgreSQL ingestion;
 - backfill and recovery exercises;
 - ingestion integration suites and demo commands.
@@ -57,17 +60,17 @@ last_completed_task_id: BI-030
 
 ## Latest validation
 
-2026-10-13, BI-040 slice 3:
+2026-10-13, BI-040 slice 5 closeout:
 
-- test-first evidence — four container/Compose contract tests failed before the Dockerfile, build exclusions, service wiring, and mock environment existed;
-- LSP diagnostics for all changed Python files — PASS with no findings; Dockerfile LSP analysis is unavailable, so its contract is covered by static tests and a successful live build;
-- `docker compose --env-file .env.example config --quiet` and the pinned mock image build — PASS;
+- `./scripts/doctor.sh`, Compose configuration, and `make help` — PASS;
+- LSP diagnostics for all four changed Python files — PASS with no findings;
 - `make lint` — PASS, including Ruff formatting/lint and strict mypy over `src`, `mock_api`, and tests;
-- `make test` — PASS, 132 default tests; 13 integration tests deselected;
-- focused live mock API integration — PASS, 4 tests including bounded restart;
-- `make integration` — PASS, including 13 initial PostgreSQL/Garage/mock API tests, repeat bootstrap, and isolated persistence/reset recovery;
-- backlog JSON Schema validation and `./scripts/verify.sh` — PASS, including doctor, policy, locked sync, lint, 132 default tests, and Compose configuration.
+- `make test` — PASS, 140 default tests; 13 integration tests deselected;
+- `make fixtures-check SOURCE_SEED=20260901` — PASS for 24 indexed payloads and two clean temporary regenerations;
+- `make up` and `make seed SOURCE_SEED=20260901` — PASS with bounded health and repeatable 24-row PostgreSQL replacement;
+- `make integration` — PASS: 13 source/storage/infrastructure tests, repeat seed and marker checks, plus isolated persistence and destructive-recovery verification;
+- repository policy, backlog schema validation, and `./scripts/verify.sh` — PASS.
 
 ## Next atomic step
 
-Start BI-040 slice 4 with failing tests for the required CSV/JSON/Parquet scenario matrix, cross-format schema and logical-row equality, duplicate cases, checksum index, and byte-identical temporary regeneration.
+Create the detailed test-first implementation plan for BI-050 REST API ingestion and backfill without implementing ingestion behavior.

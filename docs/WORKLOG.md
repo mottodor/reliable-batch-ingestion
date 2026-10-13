@@ -188,3 +188,27 @@ A concise append-only record of work sessions. The detailed current handoff live
 - LSP diagnostics, Compose configuration, pinned image build, `make lint`, `make test` (132 passed), focused integration, `make integration` (13 initial integration tests plus recovery checks), and `./scripts/verify.sh` — PASS.
 - BI-040 remains in progress; supplier fixture generation is not implemented.
 - Next task: BI-040 slice 4 supplier CSV/JSON/Parquet corpus, starting with failing scenario-matrix and cross-format equality tests.
+
+## 2026-10-13 — BI-040 slice 4 supplier fixture corpus
+
+- Added fixture contract tests first: collection failed before the generator module existed, and the committed-corpus equality assertion then failed before default fixtures were generated.
+- Added a typed deterministic generator for valid, empty, schema-invalid, and mixed supplier prices in CSV, JSON, and Parquet, with explicit stable serialization and Parquet writer options based on current `/apache/arrow` Context7 documentation.
+- Committed 24 default-seed payloads: four canonical scenarios and both duplicate-delivery patterns in every format, without assigning BI-060 acceptance or rejection outcomes.
+- Added a sorted `checksums.json` with fixture schema version, seed, source date, path, byte length, SHA-256, format, and scenario for every payload.
+- Added validated `make fixtures` generation and `make fixtures-check`, which compares two temporary generations to committed bytes and verifies index integrity, schemas, logical rows, invalid/mixed cases, and duplicate relationships.
+- Documented corpus layout, scenario semantics, commands, and the lockfile/Python/PyArrow byte-stability boundary; BI-040 remains in progress for slice 5 closeout.
+- Focused fixture tests (8), LSP diagnostics, `make fixtures-check SOURCE_SEED=20260901`, `make lint`, `make test` (140 passed), Compose configuration, repository policy, and `./scripts/verify.sh` — PASS.
+- `make integration` — NOT RUN because slice 4 changes only offline fixture generation; the complete source/Compose acceptance matrix remains BI-040 slice 5.
+- Next task: BI-040 slice 5 documentation and acceptance closeout, including the full source/Compose validation matrix and task-state advancement only if all criteria pass.
+
+## 2026-10-13 — BI-040 slice 5 acceptance closeout
+
+- Audited `docs/source-contracts.md`, README, and `make help` against the implemented seed, mock API, fixture generation/check, lifecycle, and integration behavior; removed remaining in-progress wording after acceptance passed.
+- Confirmed one explicit seed contract across pure generators, PostgreSQL, the live mock API, and supplier fixtures, with invalid-input isolation and alternate-seed schema stability covered by tests.
+- Confirmed all documented live API scenarios through integration coverage: bounded pagination, isolated `429` then success with `Retry-After`, permanent `500`, exact malformed JSON, and successful pages before a repeatable partial failure.
+- Confirmed the committed 24-file supplier corpus, cross-format schema/logical-row equality, checksum index, duplicate relationships, and byte-identical clean temporary regeneration.
+- `./scripts/doctor.sh`, Compose configuration, `make help`, `make lint`, `make test` (140 passed), `make fixtures-check SOURCE_SEED=20260901`, `make up`, and `make seed SOURCE_SEED=20260901` — PASS.
+- `make integration` — PASS: 13 initial PostgreSQL/Garage/mock API tests, repeat seed and infrastructure-marker verification, and isolated down/up plus destructive-recovery checks with cleanup.
+- Marked BI-040 done, selected BI-050 as the active todo task, and synchronized the backlog, plan, README, source contract, and state handoff.
+- Repository policy, backlog JSON Schema validation, and final `./scripts/verify.sh` — PASS.
+- Next task: create the detailed test-first BI-050 REST API ingestion and backfill implementation plan without implementing behavior.

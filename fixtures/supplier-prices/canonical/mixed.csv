@@ -1,0 +1,4 @@
+supplier_id,product_id,price_minor_units,currency,effective_date
+SUP-001,SKU-0001,23251,GBP,2026-09-01
+SUP-001,SKU-0004,0,EUR,2026-09-01
+SUP-001,SKU-0007,38403,USD,2026-09-01

@@ -1,6 +1,6 @@
 # Deterministic source contracts
 
-This document describes only source behavior that currently exists. BI-040 remains in progress: deterministic PostgreSQL materialization and the live mock HTTP source are implemented, while generated CSV/JSON/Parquet files are deferred to slice 4.
+This document describes the completed BI-040 source behavior: deterministic PostgreSQL materialization, the live mock HTTP source, and the committed supplier fixture corpus.
 
 ## Seed contract
 
@@ -129,7 +129,44 @@ currency
 effective_date
 ```
 
-Prices are positive integer minor units. This avoids float-dependent representations when slice 4 writes equivalent CSV, JSON, and Parquet fixtures.
+Prices are positive integer minor units. This avoids float-dependent representations in equivalent CSV, JSON, and Parquet fixtures.
+
+## Supplier fixture corpus
+
+The committed default corpus is rooted at `fixtures/`, uses seed `20260901` and source date `2026-09-01`, and contains 24 payload files plus `checksums.json`. The canonical scenarios exist in every supported format:
+
+```text
+fixtures/supplier-prices/canonical/{valid,empty,schema_invalid,mixed}.{csv,json,parquet}
+```
+
+- `valid` contains the same 15 sorted logical rows in all three formats;
+- `empty` retains the CSV header, a JSON empty array, or the full zero-row Parquet schema;
+- `schema_invalid` remains parseable but omits the required `currency` field/column;
+- `mixed` retains the valid schema and contains positive prices plus one business-invalid zero price. It records a condition only and does not decide BI-060 file atomicity.
+
+Duplicate-delivery inputs exist for every format:
+
+```text
+fixtures/supplier-prices/same-name-delivery-a/supplier-prices-2026-09-01.<format>
+fixtures/supplier-prices/same-name-delivery-b/supplier-prices-2026-09-01.<format>
+fixtures/supplier-prices/renamed-content/supplier-prices-original-2026-09-01.<format>
+fixtures/supplier-prices/renamed-content/supplier-prices-renamed-2026-09-01.<format>
+```
+
+The two same-name delivery directories contain equal basenames and bytes. The renamed-content pair has different basenames and equal bytes. Both duplicate cases copy the corresponding canonical valid payload and assign no ingestion outcome.
+
+CSV uses UTF-8, fixed column order, LF line endings, deterministic minimal quoting, and a final newline. JSON uses a top-level array, fixed key order and indentation/separators, UTF-8, and a final newline. Parquet uses non-null `string`, `string`, `int64`, `string`, and `date32` fields, Parquet version 2.6, a fixed row-group bound, no compression or dictionary encoding, no statistics, and data page version 2.0. No generated timestamp or path is stored in payload metadata.
+
+`fixtures/checksums.json` is sorted by relative path and records fixture schema version 1, seed, source date, byte length, SHA-256, format, and scenario for every payload. It is generation evidence, not an ingestion manifest.
+
+Regenerate the committed corpus or verify it without changing tracked files:
+
+```bash
+make fixtures SOURCE_SEED=20260901
+make fixtures-check SOURCE_SEED=20260901
+```
+
+`make fixtures` validates `SOURCE_SEED` before changing the output and replaces the corpus only after a complete temporary generation. `make fixtures-check` creates two temporary corpora, validates their indices, schemas, rows, invalid/mixed scenarios, and duplicate relationships, then requires both byte inventories to equal the committed corpus. A non-default seed is supported for explicit generation experiments but intentionally cannot pass against the committed default corpus.
 
 ## Reproducibility boundary
 
@@ -139,9 +176,4 @@ The PostgreSQL source now reproduces the pure order records exactly for the same
 
 Mock API successful pages and deterministic error/fault bodies are byte-stable for the same implementation, seed, and request. Transport-added headers such as HTTP `Date` are not part of the byte-stability contract. Live tests traverse both resources, exercise every fault, and compare a successful page across a bounded service restart.
 
-The following byte-level guarantees are not implemented yet:
-
-- CSV, JSON, and Parquet serialization belongs to BI-040 slice 4;
-- committed fixture checksums do not exist yet.
-
-When Parquet generation is added, exact bytes will be guaranteed only with the committed `uv.lock`, Python 3.12, the supported local toolchain, and explicit writer options. PyArrow writes its implementation version into Parquet `created_by` metadata, so another PyArrow version will guarantee logical schema and row equality rather than identical file bytes.
+Supplier CSV, JSON, and Parquet payloads are byte-stable for repeated generation with the same code, seed, source date, committed `uv.lock`, Python 3.12, and supported local toolchain. Tests and `make fixtures-check` compare exact relative path sets, bytes, lengths, checksums, parsed schemas, and logical rows. PyArrow writes its implementation version into Parquet `created_by` metadata, so another PyArrow version guarantees schema and logical-row equality rather than identical Parquet bytes.

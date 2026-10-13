@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-040
+active_task_id: BI-050
 
 status_values:
   - todo
@@ -120,7 +120,7 @@ tasks:
 
   - id: BI-040
     title: Deterministic source generators and fixtures
-    status: in_progress
+    status: done
     depends_on: [BI-020]
     scope:
       - Define one validated SOURCE_SEED contract and deterministic, time-independent OmniRetail record generation.

@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic core contracts, local Compose infrastructure, the shared S3 boundary, and BI-040 slices 1–3 deterministic PostgreSQL and mock API sources are implemented; supplier fixtures remain next.
+> Current stage: deterministic core contracts, local Compose infrastructure, the shared S3 boundary, and BI-040 deterministic PostgreSQL, mock API, and supplier fixture sources are complete; BI-050 REST ingestion and backfill is next.
 
 ## Project references
 
@@ -93,6 +93,17 @@ docker compose --project-name reliable-batch-ingestion --env-file .env exec post
 python3 -c 'import urllib.request; urllib.request.urlopen("http://localhost:8080/health", timeout=2).read()'
 ```
 
+## Supplier fixture corpus
+
+The committed `fixtures/` corpus contains valid, empty, schema-invalid, and mixed-row supplier prices in CSV, JSON, and Parquet, plus same-name redeliveries and same-content/different-name files. `fixtures/checksums.json` records each payload's scenario, format, byte length, and SHA-256. It is fixture-generation evidence rather than an ingestion manifest.
+
+```bash
+make fixtures SOURCE_SEED=20260901        # Replace the committed corpus deterministically.
+make fixtures-check SOURCE_SEED=20260901  # Regenerate twice and compare bytes and semantics.
+```
+
+Generation validates the seed before changing the output. The check uses temporary directories and does not modify committed fixtures. Exact Parquet bytes are scoped to Python 3.12, the committed `uv.lock`, and the supported local toolchain; schema and logical rows remain the cross-version contract. Scenario paths and serialization details are documented in [`docs/source-contracts.md`](docs/source-contracts.md).
+
 ## Shared S3 boundary
 
 Application code constructs the path-style SigV4 client explicitly from `StorageConfig`. Botocore standard retries use the configured total-attempt budget, including the initial request, plus explicit connect/read timeouts. Shared operations stream and verify SHA-256 from object bytes; they never treat S3 `ETag` as a SHA-256 checksum.
@@ -109,6 +120,8 @@ make setup
 make format
 make lint
 make test
+make fixtures
+make fixtures-check
 make check-local-env
 make up
 make down
