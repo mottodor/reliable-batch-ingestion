@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-030
+active_task_id: BI-040
 
 status_values:
   - todo
@@ -100,19 +100,23 @@ tasks:
 
   - id: BI-030
     title: Shared S3 storage boundary
-    status: todo
+    status: done
     depends_on: [BI-020]
     scope:
-      - Implement configured path-style boto3 client construction.
-      - Implement deterministic immutable write and checksum verification.
-      - Implement copy-verify-delete movement.
-      - Implement payload-without-manifest reconciliation primitive.
+      - Extend typed storage configuration with explicit S3 attempt and socket-timeout bounds.
+      - Implement configured path-style SigV4 boto3 client construction with standard retries.
+      - Implement streamed deterministic immutable write and byte-level SHA-256 verification.
+      - Implement recoverable copy-verify-delete movement with metadata preservation.
+      - Implement read-only payload/manifest reconciliation for explicit deterministic keys.
+      - Document storage outcomes, failure states, recovery, and the single-writer limitation.
     acceptance:
-      - Core S3 operations pass against Garage.
-      - Rewriting identical content is idempotent.
-      - Existing different content at the same deterministic key is a conflict, not overwrite.
-      - Move failure leaves recoverable and documented state.
-      - Retries are bounded.
+      - Core S3 operations and path-style client behavior pass against Garage through the standard API.
+      - Rewriting identical content is idempotent and verifies streamed bytes without treating ETag as SHA-256.
+      - Existing different content at the same deterministic key is a conflict and the original bytes remain unchanged.
+      - Move deletes the source only after verified copy; source-only, both-identical, and destination-only states converge on retry.
+      - Reconciliation distinguishes absent, payload-only, complete, manifest-only, and corrupt/conflicting states without mutating them.
+      - S3 attempts, connect timeouts, and read timeouts are explicit and bounded; endpoint failure is covered deterministically.
+      - Unit tests use no external services, integration tests use local Garage, and no connection occurs at import time.
 
   - id: BI-040
     title: Deterministic source generators and fixtures

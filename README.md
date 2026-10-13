@@ -2,12 +2,13 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic core contracts and local Compose infrastructure are implemented; the shared S3 boundary is next.
+> Current stage: deterministic core contracts, local Compose infrastructure, and the shared S3 storage boundary are implemented; deterministic source fixtures are next.
 
 ## Project references
 
 - Product requirements: [`docs/batch-ingestion.md`](docs/batch-ingestion.md)
 - Core deterministic contracts: [`docs/core-contracts.md`](docs/core-contracts.md)
+- Shared S3 storage contract: [`docs/storage-contract.md`](docs/storage-contract.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
 - Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)
@@ -36,7 +37,7 @@ make setup
 make verify
 ```
 
-`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
+`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. The preflight also requires positive `S3_TOTAL_MAX_ATTEMPTS`, `S3_CONNECT_TIMEOUT_SECONDS`, and `S3_READ_TIMEOUT_SECONDS` values. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
 
 ## Local infrastructure
 
@@ -49,7 +50,7 @@ make down         # Stop containers without deleting named volumes.
 make reset        # Refuse implicit deletion and print the confirmed command.
 ```
 
-`make integration` creates deterministic PostgreSQL and S3 markers, verifies repeat bootstrap, and runs down/up plus destructive-recovery checks in the dedicated `reliable-batch-ingestion-bi020-reset-test` Compose project. Its temporary credentials and ports are not persisted, all waits are bounded, isolated resources are removed in cleanup, and the default project's volumes are compared before and after the exercise. The default services remain running afterward.
+`make integration` verifies the shared storage boundary against Garage, creates deterministic PostgreSQL and S3 markers, verifies repeat bootstrap, and runs down/up plus destructive-recovery checks in the dedicated `reliable-batch-ingestion-bi020-reset-test` Compose project. Storage checks cover immutable replay/conflict, metadata-preserving move recovery, payload-without-manifest reconciliation, and a bounded deterministic unavailable-endpoint scenario. Temporary credentials and ports are not persisted, all waits are bounded, isolated resources are removed in cleanup, and the default project's volumes are compared before and after the exercise. The default services remain running afterward.
 
 All lifecycle targets are scoped to `COMPOSE_PROJECT_NAME` (default: `reliable-batch-ingestion`). Normal `make down` preserves the three named volumes. Destructive reset is intentionally a separate, irreversible command and requires the exact confirmation token:
 
@@ -69,6 +70,12 @@ docker compose --project-name reliable-batch-ingestion --env-file .env exec gara
 docker compose --project-name reliable-batch-ingestion --env-file .env exec postgres \
   sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
+
+## Shared S3 boundary
+
+Application code constructs the path-style SigV4 client explicitly from `StorageConfig`. Botocore standard retries use the configured total-attempt budget, including the initial request, plus explicit connect/read timeouts. Shared operations stream and verify SHA-256 from object bytes; they never treat S3 `ETag` as a SHA-256 checksum.
+
+`S3Storage` provides immutable write, recoverable `copy -> verify -> delete`, and read-only payload/manifest reconciliation. Different content at an existing deterministic key is a conflict, not an overwrite. A move can temporarily leave both source and destination and converges safely when rerun. Concurrent writers for one key remain unsupported because Garage has no versioning and conditional create is not a contract foundation. See [`docs/storage-contract.md`](docs/storage-contract.md) for exact outcomes and recovery states.
 
 ## Available commands
 

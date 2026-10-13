@@ -18,6 +18,9 @@ S3_PORT=3900
 S3_BUCKET=batch-lab
 S3_ACCESS_KEY=local-access-key
 S3_SECRET_KEY=local-secret-key
+S3_TOTAL_MAX_ATTEMPTS=3
+S3_CONNECT_TIMEOUT_SECONDS=2
+S3_READ_TIMEOUT_SECONDS=5
 GARAGE_ADMIN_PORT=3903
 GARAGE_RPC_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 """
@@ -42,6 +45,36 @@ def test_preflight_accepts_complete_local_configuration(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert result.stdout.strip() == f"Local environment preflight: PASS ({env_path})"
     assert result.stderr == ""
+
+
+def test_preflight_rejects_missing_s3_retry_budget(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        VALID_INFRASTRUCTURE_ENV.replace("S3_TOTAL_MAX_ATTEMPTS=3\n", ""),
+        encoding="utf-8",
+    )
+
+    result = _run_preflight(env_path)
+
+    assert result.returncode == 1
+    assert "S3_TOTAL_MAX_ATTEMPTS" in result.stderr
+
+
+def test_preflight_rejects_invalid_s3_retry_and_timeout_bounds(tmp_path: Path) -> None:
+    invalid_values = {
+        "S3_TOTAL_MAX_ATTEMPTS=3": "S3_TOTAL_MAX_ATTEMPTS=0",
+        "S3_CONNECT_TIMEOUT_SECONDS=2": "S3_CONNECT_TIMEOUT_SECONDS=nan",
+        "S3_READ_TIMEOUT_SECONDS=5": "S3_READ_TIMEOUT_SECONDS=-1",
+    }
+    for index, (valid, invalid) in enumerate(invalid_values.items()):
+        env_path = tmp_path / f"invalid-{index}.env"
+        env_path.write_text(VALID_INFRASTRUCTURE_ENV.replace(valid, invalid), encoding="utf-8")
+
+        result = _run_preflight(env_path)
+
+        assert result.returncode == 1
+        assert valid.partition("=")[0] in result.stderr
+        assert invalid.partition("=")[2] not in result.stderr
 
 
 def test_preflight_rejects_placeholders_without_printing_values(tmp_path: Path) -> None:

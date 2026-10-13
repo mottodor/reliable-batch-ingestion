@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validate local Compose configuration without exposing credential values."""
 
+import math
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -15,10 +16,15 @@ REQUIRED_VARIABLES = (
     "S3_BUCKET",
     "S3_ACCESS_KEY",
     "S3_SECRET_KEY",
+    "S3_TOTAL_MAX_ATTEMPTS",
+    "S3_CONNECT_TIMEOUT_SECONDS",
+    "S3_READ_TIMEOUT_SECONDS",
     "GARAGE_ADMIN_PORT",
     "GARAGE_RPC_SECRET",
 )
 PORT_VARIABLES = ("POSTGRES_PORT", "S3_PORT", "GARAGE_ADMIN_PORT")
+POSITIVE_INTEGER_VARIABLES = ("S3_TOTAL_MAX_ATTEMPTS",)
+POSITIVE_FLOAT_VARIABLES = ("S3_CONNECT_TIMEOUT_SECONDS", "S3_READ_TIMEOUT_SECONDS")
 RPC_SECRET_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 
 
@@ -71,6 +77,30 @@ def validate_environment(values: Mapping[str, str]) -> list[str]:
             continue
         if not 1 <= port <= 65535:
             errors.append(f"{name} must be between 1 and 65535")
+
+    for name in POSITIVE_INTEGER_VARIABLES:
+        value = values.get(name, "")
+        if not value:
+            continue
+        try:
+            parsed_integer = int(value)
+        except ValueError:
+            errors.append(f"{name} must be a positive integer")
+            continue
+        if parsed_integer <= 0:
+            errors.append(f"{name} must be a positive integer")
+
+    for name in POSITIVE_FLOAT_VARIABLES:
+        value = values.get(name, "")
+        if not value:
+            continue
+        try:
+            parsed_float = float(value)
+        except ValueError:
+            errors.append(f"{name} must be a positive number")
+            continue
+        if not math.isfinite(parsed_float) or parsed_float <= 0:
+            errors.append(f"{name} must be a positive number")
 
     rpc_secret = values.get("GARAGE_RPC_SECRET", "")
     if rpc_secret and RPC_SECRET_PATTERN.fullmatch(rpc_secret) is None:

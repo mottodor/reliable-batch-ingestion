@@ -55,7 +55,7 @@ The one-to-one manifest key is derived without storage access:
 manifests/{source_type}/{source_name}/source_date={YYYY-MM-DD}/batch_id={batch_id}/{payload_name}.manifest.json
 ```
 
-Identical canonical identity plus identical normalized payload name yields the same raw and manifest keys. The later storage boundary must treat different bytes at an existing deterministic raw key as a conflict rather than overwrite them. Concurrent writers remain outside the core contract.
+Identical canonical identity plus identical normalized payload name yields the same raw and manifest keys. The shared storage boundary treats different bytes at an existing deterministic raw key as a conflict rather than overwriting them; see [`storage-contract.md`](storage-contract.md). Concurrent writers remain outside the core contract.
 
 ## Manifest schema version 1
 

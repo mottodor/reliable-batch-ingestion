@@ -49,8 +49,8 @@ logs: check-local-env ## Follow local service logs until interrupted
 seed: up ## Idempotently ensure infrastructure bootstrap and readiness
 	@printf 'Infrastructure bootstrap is ready; deterministic source data belongs to BI-040.\n'
 
-integration: seed ## Verify bootstrap, persistence, and isolated destructive recovery
-	BI020_MARKER_MODE=create $(UV) run pytest tests/integration/test_infrastructure.py -m integration
+integration: seed ## Verify storage contracts, bootstrap, persistence, and recovery
+	BI020_MARKER_MODE=create $(UV) run pytest tests/integration -m integration
 	$(MAKE) seed
 	BI020_MARKER_MODE=verify $(UV) run pytest tests/integration/test_infrastructure.py -m integration
 	$(UV) run python scripts/check_infrastructure_recovery.py $(COMPOSE_ENV_FILE) --protected-project-name $(COMPOSE_PROJECT_NAME)

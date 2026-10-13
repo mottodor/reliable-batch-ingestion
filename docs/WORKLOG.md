@@ -116,3 +116,27 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Marked BI-020 done, selected BI-030 as the active task, and synchronized `docs/STATE.md`.
 - Backlog JSON Schema validation and `./scripts/verify.sh` — PASS; verify covered doctor, policy, locked sync, Ruff, mypy, 43 default tests, and Compose configuration.
 - Next task: start BI-030 with tests for path-style boto3 client configuration and immutable-write conflicts.
+
+## 2026-10-13 — BI-030 implementation planning
+
+- Refined BI-030 scope and acceptance criteria while keeping it active and `todo`.
+- Added `docs/plans/BI-030.md` with fixed client configuration, retry/timeout, streamed verification, immutable-write, copy-verify-delete, reconciliation, failure-state, integration, and documentation decisions.
+- Defined recovery convergence for source-only, both-identical, destination-only, payload-only, and complete states without claiming concurrent-writer safety or exactly-once delivery.
+- Based Boto3 client, retry, and S3 operation planning on current `/boto/boto3` documentation obtained through Context7.
+- Backlog JSON Schema validation — PASS.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, mypy, pytest (43 default tests), and Compose configuration.
+- Next task: start BI-030 slice 1 with failing configuration/client tests and immutable-write state/error tests.
+
+## 2026-10-13 — BI-030 shared S3 storage boundary
+
+- Added explicit S3 total-attempt, connect-timeout, and read-timeout configuration plus redacting local preflight validation.
+- Added a typed path-style SigV4 Boto3 client factory using standard retries and no import-time configuration or connections.
+- Implemented streamed byte-level immutable writes with local/post-write verification, identical replay, conflict protection, and checksum metadata without relying on `ETag`.
+- Implemented metadata-preserving `copy -> verify -> delete` movement that converges source-only, both-identical, and destination-only recovery states.
+- Implemented read-only payload/manifest reconciliation with bounded strict manifest parsing and explicit absent, payload-only, complete, and manifest-only states.
+- Added 24 storage unit tests and 4 Garage/fault-endpoint integration tests, including deterministic enforcement of the configured three-request budget.
+- Documented the public storage contract, failure states, recovery semantics, single-writer limitation, and operator configuration.
+- LSP diagnostics — PASS with no findings; `make lint` and `make test` — PASS with 72 default tests.
+- `make integration` — PASS for 8 initial infrastructure/storage tests, repeat bootstrap, isolated persistence/reset/recovery, and cleanup.
+- Backlog JSON Schema validation and `./scripts/verify.sh` — PASS; BI-030 is done and BI-040 is active.
+- Next task: plan BI-040 deterministic source generators and fixtures test-first.

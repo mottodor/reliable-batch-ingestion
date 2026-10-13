@@ -60,6 +60,8 @@ Outcome: a clean clone starts local dependencies and preserves data across resta
 
 ## Gate 3 — Shared S3 boundary (`BI-030`)
 
+Detailed execution plan: [`docs/plans/BI-030.md`](plans/BI-030.md).
+
 - path-style `boto3` client;
 - bounded retry policy;
 - immutable-write contract using a deterministic key and checksum verification;

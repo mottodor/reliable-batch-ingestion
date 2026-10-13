@@ -32,6 +32,9 @@ class StorageConfig:
     access_key: str = field(repr=False)
     secret_key: str = field(repr=False)
     addressing_style: AddressingStyle = "path"
+    total_max_attempts: int = 3
+    connect_timeout_seconds: float = 2.0
+    read_timeout_seconds: float = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +94,9 @@ class AppConfig:
                 access_key=_required(values, "S3_ACCESS_KEY"),
                 secret_key=_required(values, "S3_SECRET_KEY"),
                 addressing_style=addressing_style,
+                total_max_attempts=_positive_int(values, "S3_TOTAL_MAX_ATTEMPTS"),
+                connect_timeout_seconds=_positive_float(values, "S3_CONNECT_TIMEOUT_SECONDS"),
+                read_timeout_seconds=_positive_float(values, "S3_READ_TIMEOUT_SECONDS"),
             ),
             http=HttpConfig(
                 base_url=base_url,

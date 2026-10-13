@@ -4,11 +4,11 @@ Updated: 2026-10-13
 
 ## Current stage
 
-The deterministic core contracts and BI-020 local Compose infrastructure are implemented and documented. The next gate is the shared S3 storage boundary.
+The deterministic core contracts, BI-020 local Compose infrastructure, and BI-030 shared S3 boundary are implemented and documented. The next gate is deterministic source generators and fixtures.
 
 ```yaml
-active_task_id: BI-030
-last_completed_task_id: BI-020
+active_task_id: BI-040
+last_completed_task_id: BI-030
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -29,11 +29,15 @@ last_completed_task_id: BI-020
 - BI-020 slice 1 defines pinned PostgreSQL and Garage Compose services, separate named volumes, bounded healthchecks, secret-free Garage configuration, environment wiring, and static contract tests;
 - BI-020 slice 2 adds redacting `.env` preflight, bounded lifecycle commands, real PostgreSQL/Garage health checks, standard-S3 bucket access, and repeat-bootstrap sentinel verification;
 - BI-020 slice 3 adds project-scoped lifecycle commands, PostgreSQL/S3 persistence markers, fail-closed reset guards, exact destructive confirmation, and isolated down/up plus destructive-recovery verification;
-- BI-020 operator commands and limitations are documented, and its complete acceptance matrix passes against local Compose services.
+- BI-020 operator commands and limitations are documented, and its complete acceptance matrix passes against local Compose services;
+- BI-030 provides explicit path-style SigV4 client construction with standard total-attempt retries and connect/read timeouts;
+- immutable writes stream and verify actual bytes, accept identical replay, and reject different content without overwrite;
+- S3 movement converges source-only, both-identical, and destination-only states through copy, byte/metadata verification, then delete;
+- payload/manifest reconciliation reports absent, payload-only, complete, and manifest-only states and rejects corrupt or conflicting pairs;
+- the shared storage contract, Garage integration checks, and deterministic bounded-endpoint failure test are documented and passing.
 
 ## Not completed
 
-- the shared S3 storage boundary;
 - the deterministic mock API;
 - deterministic source generators and fixtures;
 - REST, file, and PostgreSQL ingestion;
@@ -48,18 +52,15 @@ last_completed_task_id: BI-020
 
 ## Latest validation
 
-2026-10-13, `./scripts/verify.sh` — PASS:
+2026-10-13, BI-030 acceptance validation:
 
-- doctor — PASS with no warnings;
-- repository policy — PASS;
-- locked dependency sync — PASS;
-- Ruff lint/format — PASS;
-- mypy — PASS;
-- pytest — PASS, 43 unit/default tests;
-- Compose configuration with `.env.example` — PASS;
-- separate `make integration` — PASS for repeat bootstrap, isolated down/up persistence, reset guards, destructive volume removal, clean re-bootstrap, protected-volume comparison, and cleanup;
-- default-project down/up marker verification, documented health commands, fail-closed reset checks, and tracked runtime-credential scan — PASS.
+- LSP diagnostics for all changed Python files — PASS with no findings;
+- `make lint` — PASS;
+- `make test` — PASS, 72 unit/default tests;
+- storage integration — PASS, 4 Garage/fault-endpoint tests;
+- `make integration` — PASS, including all 8 initial infrastructure/storage tests, repeat bootstrap, isolated persistence, reset guards, destructive recovery, and cleanup;
+- backlog JSON Schema validation and `./scripts/verify.sh` — PASS.
 
 ## Next atomic step
 
-Start BI-030 test-first: define the configured path-style boto3 client contract and immutable-write failure cases before implementing shared S3 operations.
+Plan BI-040 test-first, fixing deterministic seeds, source schemas, mock API fault scenarios, fixture byte-stability rules, and acceptance commands before implementation.

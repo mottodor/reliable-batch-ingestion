@@ -14,6 +14,9 @@ ENVIRONMENT = {
     "S3_ACCESS_KEY": "access-secret",
     "S3_SECRET_KEY": "storage-secret",
     "S3_ADDRESSING_STYLE": "path",
+    "S3_TOTAL_MAX_ATTEMPTS": "3",
+    "S3_CONNECT_TIMEOUT_SECONDS": "2",
+    "S3_READ_TIMEOUT_SECONDS": "5",
     "MOCK_API_BASE_URL": "http://localhost:8080",
     "HTTP_CONNECT_TIMEOUT_SECONDS": "2",
     "HTTP_READ_TIMEOUT_SECONDS": "10",
@@ -29,6 +32,9 @@ def test_configuration_is_loaded_only_from_explicit_mapping() -> None:
 
     assert config.postgres.port == 5432
     assert config.storage.addressing_style == "path"
+    assert config.storage.total_max_attempts == 3
+    assert config.storage.connect_timeout_seconds == 2.0
+    assert config.storage.read_timeout_seconds == 5.0
     assert config.http.max_attempts == 4
     assert config.snapshot_page_size == 100
 
@@ -54,6 +60,7 @@ def test_missing_configuration_is_reported_without_exposing_other_values() -> No
     ("name", "value"),
     [
         ("POSTGRES_PORT", "0"),
+        ("S3_TOTAL_MAX_ATTEMPTS", "0"),
         ("HTTP_MAX_ATTEMPTS", "many"),
         ("SNAPSHOT_PAGE_SIZE", "-1"),
     ],
@@ -66,9 +73,13 @@ def test_invalid_positive_integer_configuration_is_rejected(name: str, value: st
         AppConfig.from_env(environment)
 
 
-def test_non_finite_timeout_is_rejected() -> None:
+@pytest.mark.parametrize(
+    "name",
+    ["S3_CONNECT_TIMEOUT_SECONDS", "S3_READ_TIMEOUT_SECONDS", "HTTP_READ_TIMEOUT_SECONDS"],
+)
+def test_non_finite_timeout_is_rejected(name: str) -> None:
     environment = dict(ENVIRONMENT)
-    environment["HTTP_READ_TIMEOUT_SECONDS"] = "nan"
+    environment[name] = "nan"
 
-    with pytest.raises(ConfigurationError, match="HTTP_READ_TIMEOUT_SECONDS"):
+    with pytest.raises(ConfigurationError, match=name):
         AppConfig.from_env(environment)
