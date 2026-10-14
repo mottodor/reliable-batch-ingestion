@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic core contracts, local Compose infrastructure, the shared S3 boundary, and BI-040 deterministic PostgreSQL, mock API, and supplier fixture sources are complete; BI-050 REST ingestion and backfill is next.
+> Current stage: deterministic core contracts, local Compose infrastructure, shared S3 storage, deterministic sources, and BI-050 REST ingestion/backfill are complete; BI-060 file ingestion is next.
 
 ## Project references
 
@@ -10,6 +10,7 @@ A learning project for building restart-safe, idempotent batch ingestion from RE
 - Core deterministic contracts: [`docs/core-contracts.md`](docs/core-contracts.md)
 - Shared S3 storage contract: [`docs/storage-contract.md`](docs/storage-contract.md)
 - Deterministic source contracts: [`docs/source-contracts.md`](docs/source-contracts.md)
+- REST API ingestion contract: [`docs/api-ingestion.md`](docs/api-ingestion.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
 - Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)
@@ -110,6 +111,37 @@ Application code constructs the path-style SigV4 client explicitly from `Storage
 
 `S3Storage` provides immutable write, recoverable `copy -> verify -> delete`, and read-only payload/manifest reconciliation. Different content at an existing deterministic key is a conflict, not an overwrite. A move can temporarily leave both source and destination and converges safely when rerun. Concurrent writers for one key remain unsupported because Garage has no versioning and conditional create is not a contract foundation. See [`docs/storage-contract.md`](docs/storage-contract.md) for exact outcomes and recovery states.
 
+## REST API ingestion
+
+Start the local services, then run either one canonical source date or an inclusive date range:
+
+```bash
+make up
+make ingest-api ARGS="run --source fx-rates --date 2026-09-01"
+make ingest-api ARGS="backfill --source fx-rates --from 2026-09-01 --to 2026-09-07"
+```
+
+The production source allow-list is `fx-rates` and `shipping-statuses`. Dates must use strict `YYYY-MM-DD` form. Backfill runs sequentially in ascending order, includes both endpoints, and stops at the first failed date. Rerunning the original range reuses complete immutable page/manifest pairs and resumes from the failed date without creating uncontrolled duplicates.
+
+Output is newline-delimited structured JSON: every attempted date emits an API event and final run summary, and a successful backfill emits a completion event. Exit codes are stable: `0` success, `2` invalid arguments/range, `3` invalid configuration, `4` handled ingestion failure, and `5` runtime setup or cleanup failure. The command reads the ignored `.env` through the existing configuration contract and closes both HTTP and S3 clients explicitly.
+
+Each HTTP 200 body is streamed under per-page time and size bounds, checksum-verified in raw storage before JSON/schema validation, and paired one-to-one with an immutable terminal manifest. Transient 429/5xx and permanent 4xx bodies are not stored as business pages. A page payload left without its manifest is repaired by rerunning the same command; complete successful pairs are verified and reused without rewriting their original manifest or `run_id`.
+
+### REST failure and recovery exercises
+
+The mock fault selectors are integration-test controls rather than production CLI flags. After the selected source fault is cleared, use the recovery shown below:
+
+| Failure | Expected object state | Recovery |
+| --- | --- | --- |
+| `429 -> success` | No 429 body object; final successful page pair after a bounded retry | No action if it succeeds; otherwise rerun the same command after rate limiting clears |
+| Permanent 500 | Earlier pages may be complete; no raw object for the failed non-200 page | Clear/fix the source fault and rerun the same `run` or full `backfill` command |
+| Permanent 4xx | No raw object for the failed response; the request is not retried | Correct the source/date/configuration and rerun the corrected command |
+| Malformed HTTP 200 | Exact malformed bytes and a terminal `failed` manifest remain | Retain the evidence; unchanged rerun re-surfaces it, while corrected bytes require a reviewed new logical identity |
+| Stop after some pages | Completed page pairs remain unchanged; the failed non-200 page is absent | Rerun the same command; completed pages are reused |
+| Stop after payload/before manifest | Verified raw payload remains in `payload_only` state | Rerun the same command; only the missing manifest is created |
+
+Exact identity/key examples, retry and `Retry-After` rules, bounds, metric meanings, recovery states, handled error codes, and the sequential-writer limitation are documented in [`docs/api-ingestion.md`](docs/api-ingestion.md).
+
 ## Available commands
 
 ```bash
@@ -123,6 +155,8 @@ make test
 make fixtures
 make fixtures-check
 make check-local-env
+make ingest-api ARGS="run --source fx-rates --date 2026-09-01"
+make ingest-api ARGS="backfill --source fx-rates --from 2026-09-01 --to 2026-09-07"
 make up
 make down
 make logs
@@ -133,7 +167,7 @@ make reset-destructive CONFIRM=destroy-local-data
 make verify
 ```
 
-Ingestion and demonstration targets will be added by their atomic tasks in `tasks/backlog.yaml`. This README does not promise commands before they exist.
+File/PostgreSQL ingestion and demonstration targets will be added by their atomic tasks in `tasks/backlog.yaml`. This README does not promise commands before they exist.
 
 ## Secrets
 

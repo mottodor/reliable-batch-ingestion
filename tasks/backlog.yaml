@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-050
+active_task_id: BI-060
 
 status_values:
   - todo
@@ -139,12 +139,13 @@ tasks:
 
   - id: BI-050
     title: REST API ingestion and backfill
-    status: todo
+    status: done
     depends_on: [BI-030, BI-040]
     scope:
       - Implement pagination, timeouts, bounded backoff, Retry-After, and error classification.
       - Persist each raw page and a logical-run manifest.
       - Resume partial runs and support inclusive date-range backfill.
+      - Expose strict single-date and backfill CLI commands with structured output and stable exit codes.
     acceptance:
       - 429 then success is recovered within retry budget.
       - Permanent 500 exhausts retry budget with explicit status.

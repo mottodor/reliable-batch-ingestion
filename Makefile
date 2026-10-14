@@ -7,7 +7,7 @@ COMPOSE_WAIT_TIMEOUT_SECONDS ?= 60
 SOURCE_SEED ?= 20260901
 export SOURCE_SEED
 
-.PHONY: help doctor policy setup lock format lint test fixtures fixtures-check check-local-env up down logs seed integration reset reset-destructive verify
+.PHONY: help doctor policy setup lock format lint test fixtures fixtures-check check-local-env ingest-api up down logs seed integration reset reset-destructive verify
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -44,6 +44,9 @@ fixtures-check: ## Compare two regenerations with the committed supplier corpus
 
 check-local-env: ## Validate ignored local infrastructure configuration
 	@$(UV) run python scripts/check_local_env.py $(COMPOSE_ENV_FILE)
+
+ingest-api: check-local-env ## Run one REST date or inclusive backfill with ARGS="..."
+	@$(UV) run --env-file $(COMPOSE_ENV_FILE) -- python -m batch_ingestion.cli $(ARGS)
 
 up: check-local-env ## Start local services and wait up to the bounded readiness deadline
 	$(COMPOSE) --project-name $(COMPOSE_PROJECT_NAME) --env-file $(COMPOSE_ENV_FILE) up --detach --wait --wait-timeout $(COMPOSE_WAIT_TIMEOUT_SECONDS)

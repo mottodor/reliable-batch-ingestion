@@ -83,6 +83,8 @@ Outcome: every failure scenario is reproducible through an explicit command and 
 
 ## Gate 5 — REST ingestion (`BI-050`)
 
+Detailed execution plan: [`docs/plans/BI-050.md`](plans/BI-050.md).
+
 - timeouts and bounded exponential backoff;
 - `Retry-After` handling for 429;
 - terminal 4xx classification;

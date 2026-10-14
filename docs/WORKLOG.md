@@ -212,3 +212,74 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Marked BI-040 done, selected BI-050 as the active todo task, and synchronized the backlog, plan, README, source contract, and state handoff.
 - Repository policy, backlog JSON Schema validation, and final `./scripts/verify.sh` — PASS.
 - Next task: create the detailed test-first BI-050 REST API ingestion and backfill implementation plan without implementing behavior.
+
+## 2026-10-13 — BI-050 REST ingestion and backfill planning
+
+- Added an implementation-ready five-slice BI-050 plan without adding ingestion behavior or changing identifier, object-key, manifest, summary, or storage contracts.
+- Fixed the two-source allow-list and logical identity inputs, deterministic page naming, strict pagination invariants, bounded body handling, raw-before-parse ordering, and source-specific page validation.
+- Defined one application-owned retry loop with attempt and monotonic elapsed budgets, deterministic capped exponential backoff, direct HTTP status classification, and delta-seconds/HTTP-date `Retry-After` handling.
+- Defined exact reconciliation behavior for absent, payload-only, complete, manifest-only, failed-manifest, and conflict states under the existing sequential-writer limitation.
+- Defined metric meanings, structured failure outcomes, CLI commands, inclusive sequential fail-fast backfill, and repeated-run/backfill inventory evidence.
+- Mapped every BI-050 acceptance criterion to unit or local Compose evidence, including `429 -> success`, permanent 500 exhaustion, one-request permanent 4xx, preserved malformed bytes, partial-run recovery, and idempotent replay.
+- Based HTTP client, timeout, raw-stream, response, and transport-retry decisions on current Context7 `/encode/httpx/0.28.1` documentation.
+- Marked BI-050 `in_progress`; `./scripts/doctor.sh`, repository policy, backlog validation, Ruff, mypy, 140 default tests, Compose configuration, and `./scripts/verify.sh` — PASS.
+- LSP diagnostics and `make integration` — NOT RUN because only planning/state documentation changed.
+- Next task: start BI-050 slice 1 with failing configuration, source/page contract, retry-classification, `Retry-After`, and attempt/elapsed-budget tests.
+
+## 2026-10-13 — BI-050 slice 1 configuration, sources, and retry policy
+
+- Added failing tests first for all new HTTP bounds, HTTPX lifecycle/timeouts, the two source schemas, pagination consistency, status/transport classification, `Retry-After`, and attempt/elapsed budgets.
+- Extended explicit configuration with positive backoff-cap, elapsed-budget, response-size, and backfill settings plus page-size `<= 100` and maximum-pages `<= 9,999` protocol bounds; retained secret redaction and import-time purity.
+- Added one context-managed HTTPX client boundary with `trust_env=False`, no hidden transport retries, explicit connect/read/write/pool timeouts, and per-request remaining-deadline clipping.
+- Added allow-listed `fx-rates` and `shipping-statuses` descriptors, deterministic logical identities/page names, exact envelope/item field validation, strict types, and consistent page totals/item counts/next-page progression.
+- Added pure direct-status and transport-error classification, capped deterministic exponential fallback, delta-seconds and HTTP-date `Retry-After`, and injected monotonic/wall clocks and sleep under attempt plus elapsed limits.
+- Current HTTPX behavior was verified with Context7 `/encode/httpx/0.28.1`; focused 91-test suite, LSP diagnostics, `make lint`, `make test` (221 passed), Compose configuration, repository policy, and `./scripts/verify.sh` — PASS.
+- `make integration` — NOT RUN because this slice adds pure contracts and no live HTTP fetching or S3 persistence.
+- Next task: BI-050 slice 2 bounded HTTP page streaming and immutable page/manifest persistence for absent, payload-only, and complete-success states.
+
+## 2026-10-14 — BI-050 slice 2 bounded fetching and immutable happy path
+
+- Added failing tests first with HTTPX streaming transports and a recording storage fake for raw chunking, deadline/size bounds, checksums, raw-before-parse ordering, strict page traversal, reconciliation states, manifests, and metrics.
+- Added a context-owned fetched-page result that streams raw bytes in bounded chunks to a seekable spooled file, requires `application/json`, clips request timeouts to the page deadline, checks elapsed time after chunks, and computes exact SHA-256 and length.
+- Added the single-date happy-path service using only the shared storage interface: exact-key reconciliation, raw immutable write before decode/validation, strict multi-page traversal, canonical succeeded manifests, and final summary metrics.
+- Implemented `absent`, `payload_only`, and complete-success behavior; payload-only writes only its missing manifest, while complete-success preserves the original manifest and `run_id`, performs no writes, and increments duplicate metrics.
+- Added live integration for both allow-listed resources against the Compose mock API and Garage; every stored raw page equals the source response bytes and the exact manifest inventory parses under schema version 1.
+- Current HTTPX behavior was checked through Context7 `/encode/httpx/0.28.1`; focused 12-test unit suite, LSP diagnostics, `make lint`, `make test` (233 passed), Compose configuration, repository policy, and `./scripts/verify.sh` — PASS.
+- Focused live integration — PASS, 2 tests; full `make integration` — PASS, 15 integration tests plus repeat-seed, persistence, and destructive-recovery checks, using a deleted ephemeral merged environment file without changing ignored `.env`.
+- Next task: BI-050 slice 3 bounded retry execution, typed failures, malformed-page failed manifests, and partial-run recovery across all reconciliation states.
+
+## 2026-10-14 — BI-050 slice 3 failure recovery
+
+- Added failing tests first for `429 -> success`, permanent 4xx, attempt/elapsed exhaustion for 5xx and transport failures, exact retry delays, malformed bodies, terminal failed manifests, every reconciliation failure state, and interruption between payload and manifest writes.
+- Implemented one application-owned retry loop around synchronous HTTPX streaming; attempts and elapsed time remain bounded, valid `Retry-After` is honored, permanent 4xx returns after one request, and non-200 bodies are never persisted as business pages.
+- Added stable API error codes, secret-free structured retry/final events, and failure exceptions carrying the final `RunSummary` for handled HTTP, validation, state, conflict, corruption, and storage failures.
+- Preserved invalid HTTP 200 bytes before writing canonical terminal `failed` manifests; complete failed pages re-surface unchanged and succeeded/failed status mismatches fail explicitly.
+- Added payload-only, complete-success, complete-failed, manifest-only, conflict, malformed-manifest, and post-payload interruption recovery coverage without overwrite or cleanup-based repair.
+- Added live Garage/mock API scenarios for rate-limit recovery, exact permanent-500 exhaustion, malformed-byte preservation, partial-page rerun, and pre-created payload-only recovery.
+- Checked HTTPX 0.28.1 streaming and transport behavior through Context7 `/encode/httpx/0.28.1`; focused unit tests (65), focused integration (7), LSP diagnostics, `make lint`, and `make test` (245 passed) — PASS.
+- Full `make integration` with the older ignored `.env` temporarily supplemented by committed HTTP defaults — PASS: 20 integration tests plus repeat-seed, persistence, and destructive-recovery checks; repository policy and `./scripts/verify.sh` — PASS.
+- Next task: BI-050 slice 4 CLI contracts and inclusive fail-fast backfill using the tested single-date primitive.
+
+## 2026-10-14 — BI-050 slice 4 CLI and inclusive backfill
+
+- Added failing tests first for inclusive ascending enumeration, maximum-range/reversed-range rejection, fail-fast behavior, strict CLI dates/source allow-list, structured output, stable exit codes, and explicit HTTP/S3 cleanup.
+- Added one sequential inclusive backfill service that calls the existing single-date primitive for every date and naturally stops on the first `ApiIngestionError`; no alternate storage, retry, identity, or page path was introduced.
+- Added `batch_ingestion.cli` with the documented `run` and `backfill` forms, pre-client validation, newline-delimited JSON output, and stable `0/2/3/4/5` exit codes.
+- Added `make ingest-api`, loading the ignored environment through current uv `--env-file` semantics verified with Context7 `/websites/astral_sh_uv`; existing process values retain precedence.
+- Added live multi-date evidence for exact key/checksum inventory stability, zero newly written payload bytes plus duplicate metrics on repeat, and full-range recovery after a fail-fast middle-date fault without changing earlier objects.
+- Updated README command/behavior documentation, the BI-050 plan status, and current state; BI-050 remains `in_progress` for slice 5 documentation and acceptance closeout.
+- Focused unit tests (13), focused integration (9), LSP diagnostics, `make lint`, `make test` (258 passed), Compose configuration, and `./scripts/verify.sh` — PASS.
+- Plain `make integration` first failed because the older ignored `.env` lacks BI-050 HTTP settings; the full target passed with 22 integration tests plus recovery checks using a deleted temporary merge of ignored credentials and committed HTTP defaults.
+- Next task: BI-050 slice 5 detailed API-ingestion documentation and full acceptance closeout.
+
+## 2026-10-14 — BI-050 slice 5 documentation and acceptance closeout
+
+- Added `docs/api-ingestion.md` with the implemented source identity and deterministic-key examples, timeout/retry/body bounds, status matrix, `Retry-After`, raw-before-parse ordering, page-manifest semantics, metrics, structured outcomes, reconciliation states, recovery commands, fail-fast backfill, and sequential-writer limitation.
+- Updated README with only the implemented REST command forms and tested expected states/recovery actions for 429, permanent 500/4xx, malformed HTTP 200, partial-page failure, and payload-only interruption.
+- Confirmed the complete BI-050 acceptance evidence: both source paginations, bounded retries/timeouts, one-request permanent 4xx, `429 -> success`, exact permanent-500 exhaustion, malformed-byte preservation, payload-only and partial-run recovery, repeated-run/backfill idempotency, and full-range fail-fast resume.
+- `./scripts/doctor.sh`, documentation audit, repository policy, `make help`, Compose configuration, LSP diagnostics for 17 BI-050 Python paths, `make lint`, and `make test` (258 passed; 22 integration tests deselected) — PASS.
+- Explicit local `make up` and `make seed SOURCE_SEED=20260901` — PASS using a deleted ephemeral environment that combined ignored credentials with committed missing HTTP defaults.
+- The first full integration attempt with only `COMPOSE_ENV_FILE` overridden — FAIL because legacy non-API fixtures read the older ignored `.env` directly; all 9 BI-050 live tests passed before 11 unrelated fixture setup errors.
+- Full `make integration` after temporarily supplementing and then restoring the ignored `.env` — PASS: 22 integration tests plus repeat-seed, persistence, destructive-reset guards/recovery, and cleanup.
+- Marked BI-050 done, selected BI-060 as the active todo task, synchronized README/backlog/state/plan, and ran final `./scripts/verify.sh` — PASS.
+- Next task: create the detailed test-first BI-060 file-ingestion plan and record the required file-atomicity ADR before implementing behavior.

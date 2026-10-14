@@ -1,14 +1,14 @@
 # Project state
 
-Updated: 2026-10-13
+Updated: 2026-10-14
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, and BI-040 deterministic source generators and fixtures are implemented and documented. BI-050 REST API ingestion and backfill is selected as the next task.
+The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, and BI-050 REST API ingestion/backfill are implemented, documented, and acceptance-tested. BI-060 file ingestion is selected for planning and implementation.
 
 ```yaml
-active_task_id: BI-050
-last_completed_task_id: BI-040
+active_task_id: BI-060
+last_completed_task_id: BI-050
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -44,33 +44,53 @@ last_completed_task_id: BI-040
 - BI-040 slice 4 commits valid, empty, schema-invalid, and mixed supplier-price fixtures in CSV, JSON, and Parquet with equal cross-format valid rows and explicit stable schemas;
 - same-name redelivery and renamed-content cases exist in every format as byte-identical copies without assigning future BI-060 outcomes;
 - the sorted checksum index covers all 24 payloads, and `make fixtures-check` validates two temporary generations against committed paths, bytes, lengths, checksums, schemas, rows, and scenario relationships;
-- BI-040 source schemas, seed behavior, mock fault controls, fixture layout, regeneration commands, and reproducibility boundaries are documented, and the full offline plus live Compose acceptance matrix passes.
+- BI-040 source schemas, seed behavior, mock fault controls, fixture layout, regeneration commands, and reproducibility boundaries are documented, and the full offline plus live Compose acceptance matrix passes;
+- BI-050 has a detailed test-first plan fixing source identity, retry and `Retry-After` budgets, bounded page handling, raw-before-parse persistence, per-page manifests, reconciliation recovery, structured outcomes, CLI semantics, and inclusive fail-fast backfill;
+- BI-050 slice 1 adds validated HTTP backoff, elapsed, pagination, response-size, and backfill bounds plus explicit four-phase HTTPX timeouts and one context-managed client with environment proxy use disabled;
+- the allow-listed API descriptors now derive deterministic logical identities and four-digit page names, and strictly validate both source-specific item schemas and cross-page pagination invariants;
+- pure retry policy classifies every HTTP/transport outcome, parses delta-seconds and HTTP-date `Retry-After`, applies capped exponential fallback, and enforces both attempt and monotonic elapsed budgets with injected clocks and sleep;
+- BI-050 slice 2 streams raw HTTP 200 bodies in bounded chunks to seekable spooled files, enforces JSON media type, response-size and monotonic deadline bounds, and computes exact byte length and SHA-256 without content decoding;
+- the single-date happy path traverses strict sequential pagination, reconciles exact payload/manifest keys, writes and verifies raw bytes before JSON/schema validation, creates canonical terminal API manifests, and emits exact `RunSummary` metrics;
+- absent pages, payload-only recovery, and complete-success replay are covered without overwrite: complete pages retain their original manifests and `run_id`, count as duplicates, and produce no writes;
+- live integration covers both API resources against the Compose mock API and Garage, comparing every stored raw body byte-for-byte and strictly parsing the exact page-manifest inventory;
+- the application-owned HTTP loop now retries 429, 5xx, and transport failures under both attempt and monotonic elapsed budgets, honors valid `Retry-After`, and never retries permanent 4xx responses;
+- handled API failures carry stable typed error codes, a secret-free structured event, and a final `RunSummary`; retry events record the actual next attempt, classification, status, and selected delay;
+- malformed HTTP 200 bodies are immutably preserved before terminal `failed` manifests are written, while non-200 error bodies never become business page objects;
+- reconciliation now safely reuses complete succeeded pages, re-surfaces complete failed pages, repairs payload-only pages by adding only the missing manifest, and fails without cleanup for manifest-only, conflict, and malformed-manifest states;
+- live fault coverage proves `429 -> success`, exact permanent-500 attempt exhaustion, exact malformed-byte preservation, partial-page rerun, and payload-only recovery against the Compose mock API and Garage;
+- the REST CLI exposes strict allow-listed single-date and backfill commands, emits newline-delimited structured JSON, explicitly closes HTTP/S3 clients, and maps usage, configuration, handled ingestion, and runtime failures to stable exit codes;
+- inclusive ascending backfill reuses the single-date primitive, validates the configured maximum before opening clients, and stops at the first failed date;
+- live repeated-backfill coverage proves exact key/checksum inventory stability, zero newly written payload bytes and duplicate metrics on replay, plus safe full-range resume after a middle-date failure;
+- the REST ingestion contract documents source identity and key examples, all bounds and retry classifications, `Retry-After`, raw-before-parse ordering, page manifests, metrics, reconciliation states, recovery commands, fail-fast backfill, error/exit codes, and the sequential-writer limitation;
+- README documents only the implemented REST commands and includes tested expected states and recovery actions for rate limiting, permanent HTTP failures, malformed HTTP 200 bodies, partial pages, and payload-only interruption;
+- the complete BI-050 offline and local Compose acceptance matrix passes, so BI-050 is done and BI-060 is active.
 
 ## Not completed
 
-- REST, file, and PostgreSQL ingestion;
-- backfill and recovery exercises;
-- ingestion integration suites and demo commands.
+- file ingestion and PostgreSQL ingestion;
+- complete ingestion demo commands.
 
 ## Known limitations and risks
 
 - Garage has no bucket versioning, and conditional create with `If-None-Match` is not a contract foundation.
 - Concurrent ingestion writers are outside the core contract.
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
+- Ignored `.env` files created before BI-050 must be refreshed with the committed HTTP settings before the full integration target or ingestion CLI can load complete configuration.
 
 ## Latest validation
 
-2026-10-13, BI-040 slice 5 closeout:
+2026-10-14, BI-050 slice 5:
 
-- `./scripts/doctor.sh`, Compose configuration, and `make help` — PASS;
-- LSP diagnostics for all four changed Python files — PASS with no findings;
+- `./scripts/doctor.sh` — PASS;
+- documentation-topic audit, repository policy, `git diff --check`, `make help`, and Compose configuration — PASS;
+- LSP diagnostics for all 17 BI-050 Python implementation/test paths — PASS with no findings;
 - `make lint` — PASS, including Ruff formatting/lint and strict mypy over `src`, `mock_api`, and tests;
-- `make test` — PASS, 140 default tests; 13 integration tests deselected;
-- `make fixtures-check SOURCE_SEED=20260901` — PASS for 24 indexed payloads and two clean temporary regenerations;
-- `make up` and `make seed SOURCE_SEED=20260901` — PASS with bounded health and repeatable 24-row PostgreSQL replacement;
-- `make integration` — PASS: 13 source/storage/infrastructure tests, repeat seed and marker checks, plus isolated persistence and destructive-recovery verification;
-- repository policy, backlog schema validation, and `./scripts/verify.sh` — PASS.
+- `make test` — PASS, 258 default tests; 22 integration tests deselected;
+- explicit `make up` and `make seed SOURCE_SEED=20260901` using an ephemeral environment composed from ignored credentials and committed missing HTTP defaults — PASS;
+- the first complete `make integration` attempt — FAIL because non-API integration fixtures read the pre-existing ignored `.env` directly instead of the supplied temporary env path; 9 BI-050 live tests passed before the unrelated fixture setup errors;
+- full `make integration` with the ignored `.env` safely restored after temporary supplementation — PASS, 22 integration tests plus repeat-seed, persistence, and destructive-recovery checks;
+- final repository policy and `./scripts/verify.sh` — PASS after task-state synchronization.
 
 ## Next atomic step
 
-Create the detailed test-first implementation plan for BI-050 REST API ingestion and backfill without implementing ingestion behavior.
+Create the detailed test-first BI-060 file-ingestion plan and record the required file-atomicity ADR before implementing behavior.
