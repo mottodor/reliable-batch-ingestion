@@ -28,6 +28,11 @@ ENVIRONMENT = {
     "HTTP_MAX_PAGES": "100",
     "HTTP_MAX_RESPONSE_BYTES": "1048576",
     "HTTP_MAX_BACKFILL_DAYS": "31",
+    "FILE_MAX_BYTES": "8388608",
+    "FILE_SPOOL_THRESHOLD_BYTES": "1048576",
+    "FILE_MAX_RECORDS": "100000",
+    "FILE_PARQUET_BATCH_ROWS": "1024",
+    "FILE_MAX_DIAGNOSTIC_DETAILS": "100",
     "SNAPSHOT_PAGE_SIZE": "100",
     "LOG_LEVEL": "INFO",
 }
@@ -42,6 +47,11 @@ def test_configuration_is_loaded_only_from_explicit_mapping() -> None:
     assert config.storage.connect_timeout_seconds == 2.0
     assert config.storage.read_timeout_seconds == 5.0
     assert config.http.max_attempts == 4
+    assert config.file.max_file_bytes == 8_388_608
+    assert config.file.spool_threshold_bytes == 1_048_576
+    assert config.file.max_records == 100_000
+    assert config.file.parquet_batch_rows == 1_024
+    assert config.file.max_diagnostic_details == 100
     assert config.snapshot_page_size == 100
 
 
@@ -68,6 +78,11 @@ def test_missing_configuration_is_reported_without_exposing_other_values() -> No
         ("POSTGRES_PORT", "0"),
         ("S3_TOTAL_MAX_ATTEMPTS", "0"),
         ("HTTP_MAX_ATTEMPTS", "many"),
+        ("FILE_MAX_BYTES", "0"),
+        ("FILE_SPOOL_THRESHOLD_BYTES", "-1"),
+        ("FILE_MAX_RECORDS", "many"),
+        ("FILE_PARQUET_BATCH_ROWS", "0"),
+        ("FILE_MAX_DIAGNOSTIC_DETAILS", "-1"),
         ("SNAPSHOT_PAGE_SIZE", "-1"),
     ],
 )
@@ -76,6 +91,18 @@ def test_invalid_positive_integer_configuration_is_rejected(name: str, value: st
     environment[name] = value
 
     with pytest.raises(ConfigurationError, match=name):
+        AppConfig.from_env(environment)
+
+
+def test_file_spool_threshold_must_not_exceed_maximum_file_bytes() -> None:
+    environment = dict(ENVIRONMENT)
+    environment["FILE_MAX_BYTES"] = "1024"
+    environment["FILE_SPOOL_THRESHOLD_BYTES"] = "1025"
+
+    with pytest.raises(
+        ConfigurationError,
+        match="FILE_SPOOL_THRESHOLD_BYTES must not exceed FILE_MAX_BYTES",
+    ):
         AppConfig.from_env(environment)
 
 

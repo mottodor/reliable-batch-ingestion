@@ -17,7 +17,13 @@ from batch_ingestion.api.service import (
 )
 from batch_ingestion.api.sources import ApiSourceDescriptor
 from batch_ingestion.cli import CliExitCode, main
-from batch_ingestion.config import AppConfig, HttpConfig, PostgresConfig, StorageConfig
+from batch_ingestion.config import (
+    AppConfig,
+    FileConfig,
+    HttpConfig,
+    PostgresConfig,
+    StorageConfig,
+)
 from batch_ingestion.summary import RunSummary
 
 
@@ -43,6 +49,13 @@ def _config(*, max_backfill_days: int = 31) -> AppConfig:
             max_pages=10,
             max_response_bytes=1024,
             max_backfill_days=max_backfill_days,
+        ),
+        file=FileConfig(
+            max_file_bytes=1_024,
+            spool_threshold_bytes=512,
+            max_records=100,
+            parquet_batch_rows=10,
+            max_diagnostic_details=10,
         ),
         snapshot_page_size=10,
         log_level="INFO",

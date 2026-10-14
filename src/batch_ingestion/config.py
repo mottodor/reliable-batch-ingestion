@@ -53,12 +53,38 @@ class HttpConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class FileConfig:
+    """Explicit memory, file-size, record, batch, and diagnostic bounds."""
+
+    max_file_bytes: int
+    spool_threshold_bytes: int
+    max_records: int
+    parquet_batch_rows: int
+    max_diagnostic_details: int
+
+    def __post_init__(self) -> None:
+        values = {
+            "max_file_bytes": self.max_file_bytes,
+            "spool_threshold_bytes": self.spool_threshold_bytes,
+            "max_records": self.max_records,
+            "parquet_batch_rows": self.parquet_batch_rows,
+            "max_diagnostic_details": self.max_diagnostic_details,
+        }
+        for name, value in values.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ConfigurationError(f"{name} must be a positive integer")
+        if self.spool_threshold_bytes > self.max_file_bytes:
+            raise ConfigurationError("FILE_SPOOL_THRESHOLD_BYTES must not exceed FILE_MAX_BYTES")
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     """Complete process configuration with redacted secret representations."""
 
     postgres: PostgresConfig
     storage: StorageConfig
     http: HttpConfig
+    file: FileConfig
     snapshot_page_size: int
     log_level: LogLevel
 
@@ -122,6 +148,13 @@ class AppConfig:
                 max_pages=http_max_pages,
                 max_response_bytes=_positive_int(values, "HTTP_MAX_RESPONSE_BYTES"),
                 max_backfill_days=_positive_int(values, "HTTP_MAX_BACKFILL_DAYS"),
+            ),
+            file=FileConfig(
+                max_file_bytes=_positive_int(values, "FILE_MAX_BYTES"),
+                spool_threshold_bytes=_positive_int(values, "FILE_SPOOL_THRESHOLD_BYTES"),
+                max_records=_positive_int(values, "FILE_MAX_RECORDS"),
+                parquet_batch_rows=_positive_int(values, "FILE_PARQUET_BATCH_ROWS"),
+                max_diagnostic_details=_positive_int(values, "FILE_MAX_DIAGNOSTIC_DETAILS"),
             ),
             snapshot_page_size=_positive_int(values, "SNAPSHOT_PAGE_SIZE"),
             log_level=log_level,
