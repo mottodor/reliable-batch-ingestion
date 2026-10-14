@@ -155,18 +155,21 @@ tasks:
 
   - id: BI-060
     title: File ingestion
-    status: todo
+    status: in_progress
     depends_on: [BI-030, BI-040]
     scope:
-      - Validate source, name, checksum, schema, required fields, types, duplicates, and emptiness.
-      - Record an ADR for whole-file reject versus accepted/rejected row split.
-      - Implement landing to archive or rejected flow.
+      - Define deterministic file identity plus landing, raw, archive, rejected, and rejection-diagnostic contracts without changing manifest schema version 1.
+      - Validate allowed source, file name/date, expected checksum, format, schema, required values, strict types, business rules, emptiness, and bounded record counts for CSV, JSON, and Parquet.
+      - Implement ADR 0002 whole-file atomicity, preserving exact original bytes before validation and publishing no accepted subset from an invalid file.
+      - Distinguish same-name redelivery from identical content under a new name without creating another canonical business-data copy.
+      - Expose bounded run/resume CLI flows and recover landing to archive or rejected movement through shared S3 primitives.
     acceptance:
-      - CSV, JSON, and Parquet happy paths pass.
-      - Invalid input is retained with machine-readable rejection reason.
-      - Same name duplicate and same content under a new name are distinguished.
-      - Mixed valid/invalid behavior matches the accepted atomicity ADR.
-      - Restart during copy/delete converges to the documented state.
+      - CSV, JSON, and Parquet happy paths archive exact bytes, leave no landing object, and create one strict succeeded raw manifest.
+      - Empty, malformed, schema-invalid, checksum-mismatched, and business-invalid input is retained byte-for-byte under raw and rejected keys with a stable machine-readable primary reason.
+      - A parseable mixed file publishes no accepted rows and reports whole-file counters required by ADR 0002.
+      - Same-name duplicate and same content under a new name have distinct structured classifications while preserving one canonical raw payload, final disposition, and original manifest.
+      - Failure after verified copy but before landing deletion leaves inspectable identical objects; resume converges to destination-only without data loss or overwrite.
+      - File/record/batch/diagnostic bounds, structured summaries, stable CLI exits, recovery commands, and the sequential-writer limitation are documented and tested.
 
   - id: BI-070
     title: PostgreSQL bounded snapshot ingestion

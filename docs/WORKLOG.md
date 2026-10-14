@@ -283,3 +283,27 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Full `make integration` after temporarily supplementing and then restoring the ignored `.env` — PASS: 22 integration tests plus repeat-seed, persistence, destructive-reset guards/recovery, and cleanup.
 - Marked BI-050 done, selected BI-060 as the active todo task, synchronized README/backlog/state/plan, and ran final `./scripts/verify.sh` — PASS.
 - Next task: create the detailed test-first BI-060 file-ingestion plan and record the required file-atomicity ADR before implementing behavior.
+
+## 2026-10-14 — BI-060 whole-file atomicity decision
+
+- Accepted ADR 0002 after choosing whole-file rejection over accepted/rejected row splitting.
+- Defined one delivered file as the acceptance unit: any required validation failure rejects every record, publishes no accepted subset, and retains the exact original bytes with a machine-readable reason.
+- Distinguished business-level file atomicity from S3 movement, which remains recoverable `copy -> verify -> delete` and may temporarily leave identical source and destination objects.
+- Kept manifest schema version 1 and the existing raw/manifest object-key contract unchanged; rejection-diagnostic and landing/archive/rejected key details remain for the BI-060 implementation plan.
+- Marked BI-060 `in_progress` and synchronized the ADR index, backlog, and state handoff.
+- Backlog JSON Schema validation, repository policy, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included Ruff, strict mypy, 258 default tests, and Compose configuration.
+- LSP diagnostics and `make integration` — NOT RUN because no Python or runtime behavior changed.
+- Next task: create the detailed test-first BI-060 file-ingestion plan, including rejection-diagnostic and landing/archive/rejected key contracts.
+
+## 2026-10-14 — BI-060 file-ingestion planning
+
+- Added an implementation-ready five-slice BI-060 plan without adding runtime behavior or changing manifest schema version 1 and the canonical raw/manifest key contract.
+- Fixed one `supplier-prices` source contract, representable filename/date rules, exact CSV/JSON/Parquet schemas, strict row rules, whole-file counters, validation bounds, and stable rejection-code precedence.
+- Defined content-based file identity, deterministic landing/archive/rejected keys, canonical raw payload names, and a reason-bearing rejected key plus bounded value-free structured diagnostics.
+- Defined same-name versus renamed-content classification so renamed identical bytes use a different landing key but the same batch, raw payload, final disposition, and original manifest.
+- Defined raw-before-validation processing, terminal-manifest-after-disposition ordering, exact recovery states, raw-based landing reconstruction, and copy/delete interruption convergence through the shared storage boundary.
+- Mapped all BI-060 acceptance criteria to pure, format, service, CLI, and local Garage tests across five red-green slices.
+- Based bounded Parquet schema inspection and `iter_batches()` planning on current Context7 `/apache/arrow` documentation; no dependency change is required.
+- Backlog JSON Schema validation, repository policy, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked sync, Ruff, strict mypy, 258 default tests, and Compose configuration.
+- LSP diagnostics and `make integration` — NOT RUN because only planning/state documentation changed.
+- Next task: start BI-060 slice 1 with failing pure admission, identity/key, diagnostic, duplicate, counter, and configuration tests.

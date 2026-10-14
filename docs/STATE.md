@@ -4,7 +4,7 @@ Updated: 2026-10-14
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, and BI-050 REST API ingestion/backfill are implemented, documented, and acceptance-tested. BI-060 file ingestion is selected for planning and implementation.
+The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, and BI-050 REST API ingestion/backfill are implemented, documented, and acceptance-tested. BI-060 file ingestion is in progress: ADR 0002 and the detailed test-first implementation plan are complete, while runtime behavior remains unimplemented.
 
 ```yaml
 active_task_id: BI-060
@@ -63,11 +63,13 @@ last_completed_task_id: BI-050
 - live repeated-backfill coverage proves exact key/checksum inventory stability, zero newly written payload bytes and duplicate metrics on replay, plus safe full-range resume after a middle-date failure;
 - the REST ingestion contract documents source identity and key examples, all bounds and retry classifications, `Retry-After`, raw-before-parse ordering, page manifests, metrics, reconciliation states, recovery commands, fail-fast backfill, error/exit codes, and the sequential-writer limitation;
 - README documents only the implemented REST commands and includes tested expected states and recovery actions for rate limiting, permanent HTTP failures, malformed HTTP 200 bodies, partial pages, and payload-only interruption;
-- the complete BI-050 offline and local Compose acceptance matrix passes, so BI-050 is done and BI-060 is active.
+- the complete BI-050 offline and local Compose acceptance matrix passes, so BI-050 is done and BI-060 is active;
+- ADR 0002 selects whole-file atomicity: any required validation failure rejects the complete delivered file, publishes no accepted rows, preserves the original bytes, and uses recoverable `copy -> verify -> delete` movement without claiming an atomic S3 rename;
+- the BI-060 test-first plan fixes supplier source/name/schema rules, content-based identity, deterministic landing/raw/archive/rejected keys, reason-bearing rejection keys, bounded diagnostics and validation, same-name versus renamed-content classification, raw-before-validation ordering, and restart convergence.
 
 ## Not completed
 
-- file ingestion and PostgreSQL ingestion;
+- file-ingestion runtime behavior and PostgreSQL ingestion;
 - complete ingestion demo commands.
 
 ## Known limitations and risks
@@ -79,18 +81,14 @@ last_completed_task_id: BI-050
 
 ## Latest validation
 
-2026-10-14, BI-050 slice 5:
+2026-10-14, BI-060 implementation planning:
 
 - `./scripts/doctor.sh` — PASS;
-- documentation-topic audit, repository policy, `git diff --check`, `make help`, and Compose configuration — PASS;
-- LSP diagnostics for all 17 BI-050 Python implementation/test paths — PASS with no findings;
-- `make lint` — PASS, including Ruff formatting/lint and strict mypy over `src`, `mock_api`, and tests;
-- `make test` — PASS, 258 default tests; 22 integration tests deselected;
-- explicit `make up` and `make seed SOURCE_SEED=20260901` using an ephemeral environment composed from ignored credentials and committed missing HTTP defaults — PASS;
-- the first complete `make integration` attempt — FAIL because non-API integration fixtures read the pre-existing ignored `.env` directly instead of the supplied temporary env path; 9 BI-050 live tests passed before the unrelated fixture setup errors;
-- full `make integration` with the ignored `.env` safely restored after temporary supplementation — PASS, 22 integration tests plus repeat-seed, persistence, and destructive-recovery checks;
-- final repository policy and `./scripts/verify.sh` — PASS after task-state synchronization.
+- backlog JSON Schema validation, repository policy, and `git diff --check` — PASS;
+- `./scripts/verify.sh` — PASS, including locked dependency sync, Ruff formatting/lint, strict mypy, 258 default tests with 22 integration tests deselected, and Compose configuration;
+- LSP diagnostics — NOT RUN because no Python files changed;
+- `make integration` — NOT RUN because this change defines the implementation plan and does not change runtime or infrastructure behavior.
 
 ## Next atomic step
 
-Create the detailed test-first BI-060 file-ingestion plan and record the required file-atomicity ADR before implementing behavior.
+Start BI-060 slice 1 with failing pure tests for file admission, identity/key derivation, rejection diagnostics, duplicate classification, counters, and configuration bounds.

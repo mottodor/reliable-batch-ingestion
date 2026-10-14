@@ -96,11 +96,13 @@ Outcome: integration tests cover happy path, retries, terminal failure, malforme
 
 ## Gate 6 — File ingestion (`BI-060`)
 
+Detailed execution plan: [`docs/plans/BI-060.md`](plans/BI-060.md).
+
 - source/name/checksum/schema/required-field/type validation;
-- duplicate-name and duplicate-content handling;
-- documented file atomicity;
-- `landing -> archive | rejected`;
-- recovery between copy and delete.
+- whole-file rejection under ADR 0002 with stable machine-readable reasons;
+- deterministic landing/raw/archive/rejected keys and duplicate classification;
+- `landing -> archive | rejected` through verified copy/delete movement;
+- recovery between raw preservation, disposition movement, and manifest write.
 
 Outcome: valid, invalid, empty, mixed, and duplicate fixtures have a verifiable final state.
 

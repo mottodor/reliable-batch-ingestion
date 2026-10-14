@@ -14,6 +14,7 @@ ADRs record decisions that affect architecture, delivery semantics, or project r
 | ADR | Status | Decision |
 | --- | --- | --- |
 | [0001](0001-use-garage-for-s3-compatible-storage.md) | Accepted | Use Garage `dxflrs/garage:v2.4.1` for local S3-compatible object storage |
+| [0002](0002-use-whole-file-atomicity-for-file-ingestion.md) | Accepted | Reject a delivered file as a whole when any required validation fails |
 
 ## A new ADR is required for
 
