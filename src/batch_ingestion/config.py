@@ -44,6 +44,12 @@ class HttpConfig:
     read_timeout_seconds: float
     max_attempts: int
     backoff_base_seconds: float
+    backoff_max_seconds: float
+    max_elapsed_seconds: float
+    page_size: int
+    max_pages: int
+    max_response_bytes: int
+    max_backfill_days: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +84,12 @@ class AppConfig:
 
         endpoint_url = _url(values, "S3_ENDPOINT_URL")
         base_url = _url(values, "MOCK_API_BASE_URL")
+        http_page_size = _positive_int(values, "HTTP_PAGE_SIZE")
+        if http_page_size > 100:
+            raise ConfigurationError("HTTP_PAGE_SIZE must not exceed 100")
+        http_max_pages = _positive_int(values, "HTTP_MAX_PAGES")
+        if http_max_pages > 9_999:
+            raise ConfigurationError("HTTP_MAX_PAGES must not exceed 9999")
 
         return cls(
             postgres=PostgresConfig(
@@ -104,6 +116,12 @@ class AppConfig:
                 read_timeout_seconds=_positive_float(values, "HTTP_READ_TIMEOUT_SECONDS"),
                 max_attempts=_positive_int(values, "HTTP_MAX_ATTEMPTS"),
                 backoff_base_seconds=_positive_float(values, "HTTP_BACKOFF_BASE_SECONDS"),
+                backoff_max_seconds=_positive_float(values, "HTTP_BACKOFF_MAX_SECONDS"),
+                max_elapsed_seconds=_positive_float(values, "HTTP_MAX_ELAPSED_SECONDS"),
+                page_size=http_page_size,
+                max_pages=http_max_pages,
+                max_response_bytes=_positive_int(values, "HTTP_MAX_RESPONSE_BYTES"),
+                max_backfill_days=_positive_int(values, "HTTP_MAX_BACKFILL_DAYS"),
             ),
             snapshot_page_size=_positive_int(values, "SNAPSHOT_PAGE_SIZE"),
             log_level=log_level,
