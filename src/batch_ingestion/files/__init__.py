@@ -1,4 +1,4 @@
-"""Pure contracts for bounded supplier-file validation."""
+"""Pure and runtime contracts for supplier-file ingestion."""
 
 from .contracts import (
     DEFAULT_VALIDATION_CONTRACT,
@@ -22,6 +22,12 @@ from .diagnostics import (
     primary_rejection_code,
 )
 from .events import FileIngestionEvent, FileOutcome
+from .service import (
+    FileIngestionResult,
+    FileIngestionStateError,
+    FileStorage,
+    ingest_file_delivery,
+)
 from .validators import FileSizeLimitError, FileValidationResult, validate_file
 
 __all__ = [
@@ -34,15 +40,19 @@ __all__ = [
     "FileDiagnostic",
     "FileFormat",
     "FileIngestionEvent",
+    "FileIngestionResult",
+    "FileIngestionStateError",
     "FileOutcome",
     "FileRecordCounters",
     "FileSizeLimitError",
+    "FileStorage",
     "FileValidationResult",
     "RejectionCode",
     "bounded_diagnostics",
     "classify_duplicate",
     "delivery_rejection_codes",
     "file_record_counters",
+    "ingest_file_delivery",
     "is_supported_source",
     "parse_landing_key",
     "primary_rejection_code",

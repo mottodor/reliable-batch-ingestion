@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import sha256
+from tempfile import SpooledTemporaryFile
 from typing import BinaryIO, cast
 
 import boto3
@@ -36,6 +39,10 @@ class ObjectVerificationError(StorageError):
 
 class ObjectNotFoundError(StorageError):
     """Raised when an operation requires an object that is absent."""
+
+
+class ObjectSizeLimitError(StorageError):
+    """Raised when an object exceeds an explicit bounded-download limit."""
 
 
 class ImmutableWriteStatus(StrEnum):
@@ -70,6 +77,14 @@ class StoredObject:
     checksum_sha256: str
     content_type: str
     metadata: dict[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadedObject:
+    """One verified exact-key object backed by a context-owned seekable spool."""
+
+    info: StoredObject
+    stream: BinaryIO
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +160,104 @@ class S3Storage:
         self._bucket = bucket
         self._chunk_size = chunk_size
         self._max_manifest_bytes = max_manifest_bytes
+
+    @contextmanager
+    def download_spooled(
+        self,
+        key: str,
+        *,
+        maximum_bytes: int,
+        spool_threshold_bytes: int,
+        expected_checksum_sha256: str | None = None,
+        expected_content_length: int | None = None,
+    ) -> Iterator[DownloadedObject]:
+        """Download one exact key into a bounded context-owned seekable spool."""
+        _validate_key(key)
+        if isinstance(maximum_bytes, bool) or maximum_bytes <= 0:
+            raise ValueError("maximum_bytes must be a positive integer")
+        if (
+            isinstance(spool_threshold_bytes, bool)
+            or spool_threshold_bytes <= 0
+            or spool_threshold_bytes > maximum_bytes
+        ):
+            raise ValueError("spool_threshold_bytes must be positive and not exceed maximum_bytes")
+        if expected_checksum_sha256 is not None:
+            _validate_checksum(expected_checksum_sha256)
+        if expected_content_length is not None and (
+            isinstance(expected_content_length, bool) or expected_content_length < 0
+        ):
+            raise ValueError("expected_content_length must be a non-negative integer")
+
+        try:
+            response = self._client.get_object(Bucket=self._bucket, Key=key)
+        except ClientError as error:
+            if _is_missing(error):
+                raise ObjectNotFoundError(f"object {key!r} does not exist") from error
+            raise
+
+        body = response["Body"]
+        with SpooledTemporaryFile(max_size=spool_threshold_bytes, mode="w+b") as stream:
+            digest = sha256()
+            actual_length = 0
+            try:
+                declared_length = response.get("ContentLength")
+                if declared_length is None:
+                    raise ObjectVerificationError(f"object {key!r} has no content length")
+                if declared_length > maximum_bytes:
+                    raise ObjectSizeLimitError(f"object {key!r} exceeds the maximum download size")
+
+                while chunk := body.read(self._chunk_size):
+                    actual_length += len(chunk)
+                    if actual_length > maximum_bytes:
+                        raise ObjectSizeLimitError(
+                            f"object {key!r} exceeds the maximum download size"
+                        )
+                    digest.update(chunk)
+                    stream.write(chunk)
+            finally:
+                body.close()
+
+            if declared_length != actual_length:
+                raise ObjectVerificationError(
+                    f"object {key!r} returned inconsistent content length"
+                )
+            info = StoredObject(
+                key=key,
+                content_length=actual_length,
+                checksum_sha256=digest.hexdigest(),
+                content_type=response.get("ContentType", "application/octet-stream"),
+                metadata=dict(response.get("Metadata", {})),
+            )
+            if expected_checksum_sha256 is not None and (
+                info.checksum_sha256 != expected_checksum_sha256
+            ):
+                raise ObjectConflictError(f"object {key!r} does not match expected bytes")
+            if expected_content_length is not None and (
+                info.content_length != expected_content_length
+            ):
+                raise ObjectConflictError(f"object {key!r} does not match expected bytes")
+            stream.seek(0)
+            yield DownloadedObject(info=info, stream=cast(BinaryIO, stream))
+
+    def inspect_object(
+        self,
+        key: str,
+        *,
+        content_length: int,
+        checksum_sha256: str,
+    ) -> StoredObject | None:
+        """Inspect one exact key and require expected bytes without mutating storage."""
+        _validate_key(key)
+        _validate_expected(content_length, checksum_sha256)
+        stored = self._read_object(key)
+        if stored is not None:
+            self._require_match(
+                stored,
+                content_length=content_length,
+                checksum_sha256=checksum_sha256,
+                conflict=True,
+            )
+        return stored
 
     def write_immutable(
         self,
@@ -466,6 +579,10 @@ def _validate_key(key: str) -> None:
 def _validate_expected(content_length: int, checksum_sha256: str) -> None:
     if isinstance(content_length, bool) or content_length < 0:
         raise ValueError("content_length must be a non-negative integer")
+    _validate_checksum(checksum_sha256)
+
+
+def _validate_checksum(checksum_sha256: str) -> None:
     if len(checksum_sha256) != 64 or any(
         character not in "0123456789abcdef" for character in checksum_sha256
     ):

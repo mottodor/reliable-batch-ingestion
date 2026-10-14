@@ -1,6 +1,6 @@
 # Shared S3 storage contract
 
-This document defines the BI-030 application boundary implemented by `batch_ingestion.storage`. It supplements the object-key and manifest rules in [`core-contracts.md`](core-contracts.md) and the Garage constraints in [ADR 0001](adr/0001-use-garage-for-s3-compatible-storage.md).
+This document defines the shared application boundary implemented by `batch_ingestion.storage`: the BI-030 immutable write, movement, and reconciliation primitives plus the generic exact-key read helpers added by BI-060. It supplements the object-key and manifest rules in [`core-contracts.md`](core-contracts.md) and the Garage constraints in [ADR 0001](adr/0001-use-garage-for-s3-compatible-storage.md).
 
 ## Configuration and client construction
 
@@ -23,6 +23,21 @@ SHA-256 of the actual payload bytes is the content-identity authority. `ETag` is
 An immutable write requires a seekable binary stream positioned at byte zero, expected byte length, expected lowercase SHA-256, content type, and key. It verifies the local stream before any write and rewinds it. The checksum is also stored as `checksum-sha256` user metadata for inspection, but metadata alone is never accepted as proof of content.
 
 Manifest reads are different because manifests are intentionally small: their declared and actual size must not exceed 64 KiB before strict `Manifest.from_json()` parsing.
+
+## Exact inspection and bounded download
+
+`S3Storage.inspect_object()` observes one exact key without listing or mutation. It streams the actual bytes, returns `None` only for an S3 missing-object response, and otherwise requires the supplied length and SHA-256. Different bytes raise `ObjectConflictError`; permission, endpoint, and other non-missing failures remain visible.
+
+`S3Storage.download_spooled()` downloads one exact key into a context-owned seekable `SpooledTemporaryFile`. The caller supplies a positive maximum byte count and a positive memory threshold no greater than that maximum. The operation:
+
+1. rejects a declared object length above the maximum before reading the body;
+2. reads the response only in the storage chunk size and enforces the maximum against actual bytes;
+3. computes SHA-256 from those bytes and optionally requires an expected length/checksum;
+4. checks the declared and actual lengths;
+5. closes the S3 response body before yielding a rewound seekable stream;
+6. closes the spool when the context exits on success or failure.
+
+A missing key raises `ObjectNotFoundError`, a byte-identity mismatch raises `ObjectConflictError`, and a configured-size breach raises `ObjectSizeLimitError`. The helper does not parse a payload or apply source-specific rules. BI-060 uses it to validate from the exact verified landing/raw bytes while permitting the spool to spill to a temporary file.
 
 ## Immutable write
 

@@ -8,14 +8,17 @@ import pytest
 from botocore.exceptions import ClientError
 from mypy_boto3_s3 import S3Client
 
+import batch_ingestion.storage as storage_module
 from batch_ingestion.config import StorageConfig
 from batch_ingestion.identifiers import BatchIdentity, SourceType, manifest_key_for, raw_object_key
 from batch_ingestion.manifests import Manifest, ManifestStatus
 from batch_ingestion.storage import (
+    DownloadedObject,
     ImmutableWriteStatus,
     MoveStatus,
     ObjectConflictError,
     ObjectNotFoundError,
+    ObjectSizeLimitError,
     ObjectVerificationError,
     ReconciliationState,
     S3Storage,
@@ -44,6 +47,16 @@ class _InspectableConfig(Protocol):
     read_timeout: float
 
 
+class _TrackingBody(io.BytesIO):
+    def __init__(self, value: bytes) -> None:
+        super().__init__(value)
+        self.read_sizes: list[int] = []
+
+    def read(self, size: int | None = -1) -> bytes:
+        self.read_sizes.append(-1 if size is None else size)
+        return super().read(size)
+
+
 class FakeS3Client:
     def __init__(self) -> None:
         self.objects: dict[str, _Object] = {}
@@ -55,6 +68,8 @@ class FakeS3Client:
         self.fail_delete = False
         self.corrupt_copy = False
         self.keep_source_on_delete = False
+        self.last_body: _TrackingBody | None = None
+        self.declared_lengths: dict[str, int] = {}
 
     def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
         assert Bucket == BUCKET
@@ -63,9 +78,11 @@ class FakeS3Client:
         stored = self.objects.get(Key)
         if stored is None:
             raise _client_error("NoSuchKey", 404, "GetObject")
+        body = _TrackingBody(stored.body)
+        self.last_body = body
         return {
-            "Body": io.BytesIO(stored.body),
-            "ContentLength": len(stored.body),
+            "Body": body,
+            "ContentLength": self.declared_lengths.get(Key, len(stored.body)),
             "ContentType": stored.content_type,
             "Metadata": dict(stored.metadata),
         }
@@ -132,10 +149,16 @@ def _client_error(code: str, status: int, operation: str) -> ClientError:
     )
 
 
-def _storage(fake: FakeS3Client, *, max_manifest_bytes: int = 64 * 1024) -> S3Storage:
+def _storage(
+    fake: FakeS3Client,
+    *,
+    max_manifest_bytes: int = 64 * 1024,
+    chunk_size: int = 64 * 1024,
+) -> S3Storage:
     return S3Storage(
         client=cast(S3Client, fake),
         bucket=BUCKET,
+        chunk_size=chunk_size,
         max_manifest_bytes=max_manifest_bytes,
     )
 
@@ -204,6 +227,129 @@ def test_client_uses_explicit_path_style_sigv4_and_bounded_retries() -> None:
         assert client.meta.endpoint_url == "http://localhost:3900"
     finally:
         client.close()
+
+
+def test_bounded_download_spools_verifies_bytes_and_closes_resources() -> None:
+    fake = FakeS3Client()
+    _put_fake(fake, "landing/input.json")
+    storage = _storage(fake, chunk_size=4)
+
+    with storage.download_spooled(
+        "landing/input.json",
+        maximum_bytes=len(PAYLOAD),
+        spool_threshold_bytes=4,
+        expected_checksum_sha256=PAYLOAD_SHA256,
+    ) as downloaded:
+        assert isinstance(downloaded, DownloadedObject)
+        assert downloaded.info.content_length == len(PAYLOAD)
+        assert downloaded.info.checksum_sha256 == PAYLOAD_SHA256
+        assert downloaded.stream.seekable()
+        assert downloaded.stream.tell() == 0
+        assert downloaded.stream.read() == PAYLOAD
+        spool = downloaded.stream
+        body = fake.last_body
+        assert body is not None
+        assert body.closed is True
+        assert body.read_sizes
+        assert all(0 < size <= 4 for size in body.read_sizes)
+
+    assert spool.closed is True
+
+
+def test_bounded_download_closes_body_and_spool_on_size_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeS3Client()
+    spools: list[io.BytesIO] = []
+
+    def tracking_spool(*, max_size: int, mode: str) -> io.BytesIO:
+        assert max_size == 4
+        assert mode == "w+b"
+        spool = io.BytesIO()
+        spools.append(spool)
+        return spool
+
+    monkeypatch.setattr(storage_module, "SpooledTemporaryFile", tracking_spool)
+    _put_fake(fake, "landing/input.json")
+    fake.declared_lengths["landing/input.json"] = len(PAYLOAD) + 1
+
+    with (
+        pytest.raises(ObjectSizeLimitError, match="maximum"),
+        _storage(fake).download_spooled(
+            "landing/input.json",
+            maximum_bytes=len(PAYLOAD),
+            spool_threshold_bytes=4,
+            expected_checksum_sha256=PAYLOAD_SHA256,
+        ),
+    ):
+        pytest.fail("oversized downloads must fail before yielding")
+
+    assert fake.last_body is not None
+    assert fake.last_body.closed is True
+    assert len(spools) == 1
+    assert spools[0].closed is True
+
+
+def test_bounded_download_reports_absence_and_byte_conflicts() -> None:
+    fake = FakeS3Client()
+    storage = _storage(fake)
+
+    with (
+        pytest.raises(ObjectNotFoundError, match="landing/missing.json"),
+        storage.download_spooled(
+            "landing/missing.json",
+            maximum_bytes=100,
+            spool_threshold_bytes=10,
+            expected_checksum_sha256=PAYLOAD_SHA256,
+        ),
+    ):
+        pytest.fail("missing download must not yield")
+
+    _put_fake(fake, "landing/input.json", OTHER_PAYLOAD)
+    with (
+        pytest.raises(ObjectConflictError, match="landing/input.json"),
+        storage.download_spooled(
+            "landing/input.json",
+            maximum_bytes=100,
+            spool_threshold_bytes=10,
+            expected_checksum_sha256=PAYLOAD_SHA256,
+        ),
+    ):
+        pytest.fail("conflicting download must not yield")
+
+    assert fake.last_body is not None
+    assert fake.last_body.closed is True
+
+
+def test_exact_object_inspection_is_read_only_and_verifies_expected_bytes() -> None:
+    fake = FakeS3Client()
+    storage = _storage(fake)
+
+    assert (
+        storage.inspect_object(
+            "archive/missing.json",
+            content_length=len(PAYLOAD),
+            checksum_sha256=PAYLOAD_SHA256,
+        )
+        is None
+    )
+
+    _put_fake(fake, "archive/input.json")
+    inspected = storage.inspect_object(
+        "archive/input.json",
+        content_length=len(PAYLOAD),
+        checksum_sha256=PAYLOAD_SHA256,
+    )
+    assert inspected is not None
+    assert inspected.checksum_sha256 == PAYLOAD_SHA256
+
+    with pytest.raises(ObjectConflictError, match="archive/input.json"):
+        storage.inspect_object(
+            "archive/input.json",
+            content_length=len(OTHER_PAYLOAD),
+            checksum_sha256=OTHER_SHA256,
+        )
+    assert fake.put_count == fake.copy_count == fake.delete_count == 0
 
 
 def test_immutable_write_creates_then_accepts_identical_replay() -> None:

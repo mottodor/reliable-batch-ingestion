@@ -116,6 +116,41 @@ def test_immutable_write_is_idempotent_and_conflict_preserves_original(
         _delete_keys(app_config, key)
 
 
+def test_bounded_download_and_exact_inspection_verify_garage_bytes(
+    app_config: AppConfig, storage: S3Storage
+) -> None:
+    key = f"{PREFIX}/bounded-download.json"
+    _delete_keys(app_config, key)
+    try:
+        storage.write_immutable(
+            key,
+            io.BytesIO(PAYLOAD),
+            content_length=len(PAYLOAD),
+            checksum_sha256=PAYLOAD_SHA256,
+            content_type="application/json",
+        )
+
+        inspected = storage.inspect_object(
+            key,
+            content_length=len(PAYLOAD),
+            checksum_sha256=PAYLOAD_SHA256,
+        )
+        assert inspected is not None
+        assert inspected.content_type == "application/json"
+
+        with storage.download_spooled(
+            key,
+            maximum_bytes=len(PAYLOAD),
+            spool_threshold_bytes=4,
+            expected_content_length=len(PAYLOAD),
+            expected_checksum_sha256=PAYLOAD_SHA256,
+        ) as downloaded:
+            assert downloaded.info == inspected
+            assert downloaded.stream.read() == PAYLOAD
+    finally:
+        _delete_keys(app_config, key)
+
+
 def test_move_preserves_metadata_and_converges_from_recovery_states(
     app_config: AppConfig, storage: S3Storage
 ) -> None:
