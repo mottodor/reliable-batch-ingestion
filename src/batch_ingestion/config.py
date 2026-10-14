@@ -22,6 +22,18 @@ class PostgresConfig:
     database: str
     user: str
     password: str = field(repr=False)
+    connect_timeout_seconds: float = 3.0
+    statement_timeout_seconds: float = 30.0
+
+    def __post_init__(self) -> None:
+        _validate_positive_number(
+            self.connect_timeout_seconds,
+            field="POSTGRES_CONNECT_TIMEOUT_SECONDS",
+        )
+        _validate_positive_number(
+            self.statement_timeout_seconds,
+            field="POSTGRES_STATEMENT_TIMEOUT_SECONDS",
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +90,43 @@ class FileConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class SnapshotConfig:
+    """Explicit total-work, chunk-count, serialization, and spool bounds."""
+
+    max_elapsed_seconds: float
+    chunk_rows: int
+    max_chunks: int
+    max_chunk_bytes: int
+    spool_threshold_bytes: int
+
+    def __post_init__(self) -> None:
+        _validate_positive_number(
+            self.max_elapsed_seconds,
+            field="SNAPSHOT_MAX_ELAPSED_SECONDS",
+        )
+        integer_values = {
+            "SNAPSHOT_CHUNK_ROWS": self.chunk_rows,
+            "SNAPSHOT_MAX_CHUNKS": self.max_chunks,
+            "SNAPSHOT_MAX_CHUNK_BYTES": self.max_chunk_bytes,
+            "SNAPSHOT_SPOOL_THRESHOLD_BYTES": self.spool_threshold_bytes,
+        }
+        for name, value in integer_values.items():
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ConfigurationError(f"{name} must be a positive integer")
+        if self.max_chunks > 9_999:
+            raise ConfigurationError("SNAPSHOT_MAX_CHUNKS must not exceed 9999")
+        if self.spool_threshold_bytes > self.max_chunk_bytes:
+            raise ConfigurationError(
+                "SNAPSHOT_SPOOL_THRESHOLD_BYTES must not exceed SNAPSHOT_MAX_CHUNK_BYTES"
+            )
+
+    @property
+    def max_records(self) -> int:
+        """Maximum descriptor count admitted before a cursor or S3 write is opened."""
+        return self.chunk_rows * self.max_chunks
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     """Complete process configuration with redacted secret representations."""
 
@@ -85,7 +134,7 @@ class AppConfig:
     storage: StorageConfig
     http: HttpConfig
     file: FileConfig
-    snapshot_page_size: int
+    snapshot: SnapshotConfig
     log_level: LogLevel
 
     @classmethod
@@ -124,6 +173,10 @@ class AppConfig:
                 database=_required(values, "POSTGRES_DB"),
                 user=_required(values, "POSTGRES_USER"),
                 password=_required(values, "POSTGRES_PASSWORD"),
+                connect_timeout_seconds=_positive_float(values, "POSTGRES_CONNECT_TIMEOUT_SECONDS"),
+                statement_timeout_seconds=_positive_float(
+                    values, "POSTGRES_STATEMENT_TIMEOUT_SECONDS"
+                ),
             ),
             storage=StorageConfig(
                 endpoint_url=endpoint_url,
@@ -156,7 +209,13 @@ class AppConfig:
                 parquet_batch_rows=_positive_int(values, "FILE_PARQUET_BATCH_ROWS"),
                 max_diagnostic_details=_positive_int(values, "FILE_MAX_DIAGNOSTIC_DETAILS"),
             ),
-            snapshot_page_size=_positive_int(values, "SNAPSHOT_PAGE_SIZE"),
+            snapshot=SnapshotConfig(
+                max_elapsed_seconds=_positive_float(values, "SNAPSHOT_MAX_ELAPSED_SECONDS"),
+                chunk_rows=_positive_int(values, "SNAPSHOT_CHUNK_ROWS"),
+                max_chunks=_positive_int(values, "SNAPSHOT_MAX_CHUNKS"),
+                max_chunk_bytes=_positive_int(values, "SNAPSHOT_MAX_CHUNK_BYTES"),
+                spool_threshold_bytes=_positive_int(values, "SNAPSHOT_SPOOL_THRESHOLD_BYTES"),
+            ),
             log_level=log_level,
         )
 
@@ -188,6 +247,16 @@ def _positive_float(environ: Mapping[str, str], name: str) -> float:
     if not math.isfinite(value) or value <= 0:
         raise ConfigurationError(f"{name} must be a positive number")
     return value
+
+
+def _validate_positive_number(value: object, *, field: str) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value <= 0
+    ):
+        raise ConfigurationError(f"{field} must be a positive number")
 
 
 def _url(environ: Mapping[str, str], name: str) -> str:

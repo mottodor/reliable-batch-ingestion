@@ -108,6 +108,8 @@ Outcome: valid, invalid, empty, mixed, and duplicate fixtures have a verifiable 
 
 ## Gate 7 — PostgreSQL snapshot (`BI-070`)
 
+Detailed execution plan: [`docs/plans/BI-070.md`](plans/BI-070.md).
+
 - explicit columns;
 - server-side cursor or bounded keyset pages;
 - consistent upper bound and watermark;

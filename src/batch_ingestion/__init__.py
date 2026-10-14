@@ -7,6 +7,7 @@ from .config import (
     FileConfig,
     HttpConfig,
     PostgresConfig,
+    SnapshotConfig,
     StorageConfig,
 )
 from .identifiers import (
@@ -69,6 +70,7 @@ __all__ = [
     "ObjectSizeLimitError",
     "ObjectVerificationError",
     "PostgresConfig",
+    "SnapshotConfig",
     "ReconciliationResult",
     "ReconciliationState",
     "RunSummary",

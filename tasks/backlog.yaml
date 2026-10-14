@@ -173,9 +173,10 @@ tasks:
 
   - id: BI-070
     title: PostgreSQL bounded snapshot ingestion
-    status: todo
+    status: in_progress
     depends_on: [BI-030, BI-040]
     scope:
+      - Define deterministic daily descriptors, chunk identity/keys, strict order schema, bounded configuration, and secret-free observability contracts.
       - Extract explicit columns using bounded pages or a server-side cursor.
       - Capture consistent upper bound and watermark.
       - Persist chunks without retaining the entire snapshot in memory.

@@ -4,7 +4,7 @@ Updated: 2026-10-14
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, BI-050 REST API ingestion/backfill, and BI-060 file ingestion are implemented, documented, and acceptance-tested. BI-070 bounded PostgreSQL snapshot ingestion is the next active task and has not started.
+The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, BI-050 REST API ingestion/backfill, and BI-060 file ingestion are implemented, documented, and acceptance-tested. BI-070 bounded PostgreSQL snapshot implementation is active; slices 1–2 contracts, bounded reader, and one-chunk serializer are complete.
 
 ```yaml
 active_task_id: BI-070
@@ -79,7 +79,13 @@ last_completed_task_id: BI-060
 - live CSV, JSON, and Parquet coverage proves exact happy/rejected bytes, all planned rejection classes, ADR 0002 mixed-file counters, same-name and renamed-content duplicate classifications, unchanged original manifests/run IDs, zero replay raw bytes, and copy/delete interruption convergence through `resume`;
 - `docs/file-ingestion.md` documents the implemented admission, identity/key examples, filename/schema rules, bounds, whole-file semantics, rejection precedence, metrics, duplicate classes, recovery matrix, CLI exits, and sequential-writer limitation;
 - README now includes tested file failure states and recovery actions, while the shared storage contract documents generic exact-key inspection and bounded spooled download;
-- the complete BI-060 offline and local Compose acceptance matrix passes, so BI-060 is done and BI-070 is active.
+- the complete BI-060 offline and local Compose acceptance matrix passes, so BI-060 is done and BI-070 is active;
+- BI-070 has a detailed five-slice test-first plan fixing daily snapshot identity, read-only repeatable-read upper-watermark capture, server-side cursor chunking, deterministic Parquet payloads, exact reconciliation, replay-from-start recovery, CLI semantics, and live interruption evidence;
+- BI-070 slice 1 implements the allow-listed `orders` daily/empty/non-empty resume descriptor, canonical UTC windows and upper tuple, deterministic versioned identity plus four-digit chunk keys, exact non-null Arrow schema and Parquet writer options, and strict no-coercion row validation;
+- positive PostgreSQL connect/statement timeout and snapshot elapsed/chunk/count/byte/spool settings are explicit and cross-validated, while typed snapshot events, handled error codes, and metric adapters expose no DSN, SQL, row values, or exception text;
+- BI-070 slice 2 opens one bounded PostgreSQL connection without hidden retries, applies read-only `REPEATABLE READ` characteristics before the explicit transaction, sets transaction-local statement timeout, captures or validates the daily upper descriptor, and extracts the seven explicit columns through one named cursor using only `fetchmany(chunk_rows)`;
+- reader validation enforces exact row types, strict `(updated_at, order_id)` ordering, daily and inclusive-upper bounds, final count/watermark equality, monotonic deadlines, and cursor/transaction/connection cleanup without mutable checkpoint advancement;
+- deterministic one-chunk serialization writes the exact Arrow schema as one uncompressed Parquet row group (including the zero-row chunk), applies fixed writer options, enforces row/serialized-byte/spool bounds, streams SHA-256, rewinds output, and closes in-memory or disk-spilled spools on every exit.
 
 ## Not completed
 
@@ -91,22 +97,18 @@ last_completed_task_id: BI-060
 - Garage has no bucket versioning, and conditional create with `If-None-Match` is not a contract foundation.
 - Concurrent ingestion writers are outside the core contract.
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
-- Ignored `.env` files created before BI-060 slice 1 must be refreshed with the committed HTTP and `FILE_*` settings before the full integration target or ingestion CLI can load complete configuration.
+- Ignored `.env` files created before BI-070 slice 1 must be refreshed with the committed HTTP, `FILE_*`, PostgreSQL timeout, and `SNAPSHOT_*` settings before integration targets or ingestion CLIs can load complete configuration.
 
 ## Latest validation
 
-2026-10-14, BI-060 slice 5 documentation and acceptance closeout:
+2026-10-14, BI-070 slice 2 bounded reader and serializer:
 
-- `./scripts/doctor.sh`, repository policy, `git diff --check`, Make help, and Compose configuration — PASS;
-- LSP diagnostics for the changed Python contract-test path — PASS with no findings;
+- focused snapshot/config unit tests — PASS, 64 tests;
 - `make lint` — PASS, including Ruff formatting/lint and strict mypy;
-- `make test` — PASS, 410 default tests with 49 integration tests deselected;
-- focused BI-060 unit matrix — PASS, 142 tests;
-- focused Garage file-ingestion integration — PASS, 26 tests;
-- explicit `make up` and `make seed SOURCE_SEED=20260901` — PASS;
-- `make integration` — PASS, including 49 initial integration tests, repeat seed/bootstrap verification, isolated persistence/reset recovery, and cleanup;
-- `./scripts/verify.sh` — PASS, including locked dependency sync, repository policy, lint, tests, and Compose configuration.
+- LSP diagnostics and `make test` — PASS, 458 offline tests with 49 integration tests deselected;
+- `./scripts/doctor.sh` and `./scripts/verify.sh` — PASS;
+- `make integration` — NOT RUN because slice 2 adds fake-connection reader tests and local deterministic serialization only; S3 service integration is slice 3 and live PostgreSQL interruption coverage is slice 4.
 
 ## Next atomic step
 
-Create the detailed test-first BI-070 plan for bounded PostgreSQL snapshot identity, watermark, chunking, and restart recovery.
+Implement BI-070 slice 3: the restart-safe chunk service over the shared storage boundary.

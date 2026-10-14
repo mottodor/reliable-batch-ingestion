@@ -22,6 +22,7 @@ from batch_ingestion.config import (
     FileConfig,
     HttpConfig,
     PostgresConfig,
+    SnapshotConfig,
     StorageConfig,
 )
 from batch_ingestion.summary import RunSummary
@@ -57,7 +58,13 @@ def _config(*, max_backfill_days: int = 31) -> AppConfig:
             parquet_batch_rows=10,
             max_diagnostic_details=10,
         ),
-        snapshot_page_size=10,
+        snapshot=SnapshotConfig(
+            max_elapsed_seconds=10.0,
+            chunk_rows=10,
+            max_chunks=10,
+            max_chunk_bytes=1024,
+            spool_threshold_bytes=512,
+        ),
         log_level="INFO",
     )
 

@@ -363,3 +363,43 @@ A concise append-only record of work sessions. The detailed current handoff live
 - The first `make lint` formatting check found two quote-style changes in the new test; the test was reformatted and the complete lint gate then passed with Ruff and strict mypy.
 - Marked BI-060 done, selected BI-070, synchronized README/backlog/state/plan, and ran final `./scripts/verify.sh` — PASS.
 - Next task: create the detailed test-first BI-070 plan for bounded PostgreSQL snapshot identity, watermark, chunking, and restart recovery.
+
+## 2026-10-14 — BI-070 bounded PostgreSQL snapshot planning
+
+- Added an implementation-ready five-slice BI-070 plan without adding runtime behavior or changing the identifier, raw/manifest key, manifest schema version 1, summary, or shared-storage contracts.
+- Fixed one daily `orders` source contract, a UTC half-open date window, read-only `REPEATABLE READ` capture of an inclusive `(updated_at, order_id)` upper watermark and expected row count, and explicit replay descriptors for non-empty and empty snapshots.
+- Defined identity inputs, four-digit deterministic chunk names, an exact non-null order Parquet schema, fixed writer options, one-chunk memory/spool bounds, and raw-before-manifest commit ordering.
+- Defined replay-from-row-one recovery across absent, payload-only, complete, conflict, connection-drop, source-drift, and S3-unavailable states without trusting a mutable last-row checkpoint or claiming a durable MVCC snapshot after disconnect.
+- Mapped every BI-070 acceptance criterion to pure, reader/serializer, service, CLI, and local PostgreSQL/Garage evidence, including backend termination and insertion above the captured upper bound.
+- Based server-side cursor, transaction, parameter-binding, and Parquet-writer decisions on current Context7 `/websites/psycopg_psycopg3` and `/apache/arrow` documentation; no dependency or ADR is required.
+- Marked BI-070 `in_progress` and synchronized the backlog, implementation-plan index, state handoff, and next atomic slice.
+- `./scripts/doctor.sh`, repository policy, backlog JSON Schema validation, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked sync, Ruff, strict mypy, 410 default tests, and Compose configuration.
+- One attempted ad hoc command, `uv run python scripts/validate_backlog.py`, failed because that helper does not exist; the backlog was then validated successfully against `tasks/backlog.schema.json` with the available system Python JSON Schema/YAML libraries.
+- LSP diagnostics and `make integration` — NOT RUN because only planning/state documentation changed.
+- Next task: start BI-070 slice 1 with failing pure descriptor, identity/key, Arrow schema, configuration, event, and metric contract tests.
+
+## 2026-10-14 — BI-070 slice 1 pure snapshot contracts
+
+- Added failing tests first, then implemented the pure allow-listed `orders` daily descriptor with canonical UTC half-open windows, exact empty/non-empty resume argument pairing, upper tuple/count validation, and a four-digit chunk namespace.
+- Added versioned logical identity inputs, deterministic raw/manifest chunk keys, exact expected chunk cardinality, and explicit rejection of snapshots that cannot fit the `1..9999` key namespace.
+- Added the exact seven-field non-null Arrow schema, immutable Parquet writer-option contract, schema-bearing zero-row behavior, and strict order-row validation without trimming, normalization, rounding, timezone conversion, or type coercion.
+- Replaced the unused `SNAPSHOT_PAGE_SIZE` placeholder with bounded PostgreSQL connect/statement timeouts and snapshot elapsed/chunk/count/serialized-byte/spool settings; retained password redaction and explicit-only environment loading.
+- Added secret-free typed snapshot lifecycle events, stable handled error codes, chunk outcomes, and a metric adapter that fixes PostgreSQL-inapplicable `records_rejected`, `pages_fetched`, and `retry_count` to zero.
+- Updated `.env.example`, the core configuration contract, BI-070 plan status, backlog scope, and state handoff. No reader, serializer, PostgreSQL/S3 I/O, service, manifest writer, or CLI behavior was added in this slice.
+- Used current Context7 `/apache/arrow` documentation for explicit `pa.field(..., nullable=False)`, decimal, and timezone-aware timestamp schema APIs; no dependency or ADR change was required.
+- Focused snapshot/config tests (49), all offline tests (443 passed, 49 integration tests deselected), Ruff formatting/lint, strict mypy, LSP diagnostics, repository verification, and Compose configuration — PASS.
+- `make integration` — NOT RUN because slice 1 contains pure/configuration contracts and no live PostgreSQL, Garage, service, or CLI behavior.
+- Next task: implement BI-070 slice 2 with the read-only repeatable-read bounded reader and deterministic one-chunk Parquet serializer.
+
+## 2026-10-14 — BI-070 slice 2 bounded reader and deterministic serializer
+
+- Added failing reader and serializer tests first; collection initially failed because the planned modules did not exist, then the completed focused snapshot/config suite passed 64 tests.
+- Added explicit Psycopg connection construction with bounded connect timeout and no application retry, read-only `REPEATABLE READ` characteristics configured before one explicit transaction, and a transaction-local parameterized statement timeout.
+- Captured a daily upper tuple/count or validated a supplied non-empty descriptor in the same transaction as extraction; empty resume deliberately remains empty, while non-empty validation and extraction apply the inclusive tuple bound.
+- Added one named server-side cursor over the exact seven-column ordered query, one-shot `fetchmany(chunk_rows)` iteration, strict source-row/order/window/boundary validation, final count/watermark checks, monotonic deadline checks, and stable handled connection/drift/deadline failures.
+- Added deterministic one-chunk Parquet serialization with the exact non-null schema and fixed writer options, exactly one row group including an empty chunk, row and serialized-byte bounds, streaming SHA-256, rewound context-owned output, and tested in-memory/disk-spilled spool closure.
+- Kept the slice intentionally below the S3/service/manifest/CLI boundary; no dependency, manifest, object-key, shared-storage, or ADR change was needed.
+- Verified current APIs against Context7 `/websites/psycopg_psycopg3` and `/apache/arrow` documentation for transaction characteristics, named cursor/fetch behavior, parameter binding, and explicit Parquet writer controls.
+- `./scripts/doctor.sh`, focused tests (64), LSP diagnostics, `make lint`, `make test` (458 passed; 49 integration tests deselected), and `./scripts/verify.sh` — PASS.
+- `make integration` — NOT RUN because this slice uses fake PostgreSQL connections and local Parquet spools; Garage service integration is slice 3 and live PostgreSQL interruption coverage is slice 4.
+- Next task: implement BI-070 slice 3 restart-safe chunk reconciliation, immutable raw-before-manifest persistence, replay-from-row-one recovery, and focused Garage integration.

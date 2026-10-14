@@ -6,7 +6,7 @@ This document defines the initial version of the identifier, object-key, manifes
 
 `AppConfig.from_env()` is the only environment-reading entry point. Importing `batch_ingestion` creates no network, PostgreSQL, or S3 connections and does not read environment values. Tests and callers may pass an explicit `Mapping[str, str]`.
 
-The configuration model validates required values, positive numeric bounds, HTTP(S) URLs, the S3 addressing style, and the log level. BI-060 adds explicit positive `FILE_MAX_BYTES`, `FILE_SPOOL_THRESHOLD_BYTES`, `FILE_MAX_RECORDS`, `FILE_PARQUET_BATCH_ROWS`, and `FILE_MAX_DIAGNOSTIC_DETAILS` bounds; the in-memory spool threshold may not exceed the admitted file-byte maximum. PostgreSQL passwords and S3 keys are excluded from dataclass representations. Configuration objects have no manifest serialization path.
+The configuration model validates required values, positive numeric bounds, HTTP(S) URLs, the S3 addressing style, and the log level. BI-060 adds explicit positive `FILE_MAX_BYTES`, `FILE_SPOOL_THRESHOLD_BYTES`, `FILE_MAX_RECORDS`, `FILE_PARQUET_BATCH_ROWS`, and `FILE_MAX_DIAGNOSTIC_DETAILS` bounds; the in-memory spool threshold may not exceed the admitted file-byte maximum. BI-070 slice 1 adds positive `POSTGRES_CONNECT_TIMEOUT_SECONDS`, `POSTGRES_STATEMENT_TIMEOUT_SECONDS`, `SNAPSHOT_MAX_ELAPSED_SECONDS`, `SNAPSHOT_CHUNK_ROWS`, `SNAPSHOT_MAX_CHUNKS`, `SNAPSHOT_MAX_CHUNK_BYTES`, and `SNAPSHOT_SPOOL_THRESHOLD_BYTES` bounds. Snapshot chunks are limited to the four-digit `1..9999` namespace, and the snapshot spool threshold may not exceed the serialized chunk-byte maximum. PostgreSQL passwords and S3 keys are excluded from dataclass representations. Configuration objects have no manifest serialization path.
 
 ## Checksums
 
