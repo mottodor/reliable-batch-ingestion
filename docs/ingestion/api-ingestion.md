@@ -1,6 +1,6 @@
 # REST API ingestion contract
 
-This document describes the implemented `BI-050` behavior for bounded, restart-safe REST ingestion and inclusive backfill. The identifier, manifest, summary, and shared S3 contracts remain governed by [`core-contracts.md`](core-contracts.md) and [`storage-contract.md`](storage-contract.md).
+This document describes the implemented `BI-050` behavior for bounded, restart-safe REST ingestion and inclusive backfill. The identifier, manifest, summary, and shared S3 contracts remain governed by [`core-contracts.md`](../contracts/core-contracts.md) and [`storage-contract.md`](../contracts/storage-contract.md).
 
 The delivery claim is limited to deterministic keys, immutable idempotent writes, and safe sequential redelivery. It is not an exactly-once claim, and concurrent writers for the same logical batch are unsupported.
 
@@ -97,7 +97,7 @@ For HTTP 429, `Retry-After` accepts either non-negative decimal seconds or an HT
 
 ## Page validation and persistence order
 
-A successful media-type/size check does not mean the page is valid. After raw preservation, the service requires the exact source envelope documented in [`source-contracts.md`](source-contracts.md):
+A successful media-type/size check does not mean the page is valid. After raw preservation, the service requires the exact source envelope documented in [`source-contracts.md`](../contracts/source-contracts.md):
 
 ```text
 source, source_date, page, page_size, total_pages,

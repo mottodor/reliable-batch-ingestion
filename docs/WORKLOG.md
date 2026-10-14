@@ -403,3 +403,14 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `./scripts/doctor.sh`, focused tests (64), LSP diagnostics, `make lint`, `make test` (458 passed; 49 integration tests deselected), and `./scripts/verify.sh` — PASS.
 - `make integration` — NOT RUN because this slice uses fake PostgreSQL connections and local Parquet spools; Garage service integration is slice 3 and live PostgreSQL interruption coverage is slice 4.
 - Next task: implement BI-070 slice 3 restart-safe chunk reconciliation, immutable raw-before-manifest persistence, replay-from-row-one recovery, and focused Garage integration.
+
+## 2026-10-14 — BI-007 documentation information architecture
+
+- Preserved the existing BI-070 slices 1–2 work in commit `c007f8d` before starting the independent documentation maintenance change.
+- Kept only `IMPLEMENTATION_PLAN.md`, `STATE.md`, and the append-only `WORKLOG.md` as files directly under `docs/`.
+- Moved the product specification to `docs/specification/`, shared core/source/storage contracts to `docs/contracts/`, and API/file behavior documents to `docs/ingestion/`; retained the conventional `docs/adr/` and `docs/plans/` directories.
+- Updated active repository navigation, document cross-links, detailed plans, the doctor root check, backlog acceptance references, and the file-documentation contract test; historical worklog entries were not rewritten.
+- Directed the future BI-070 behavior document to `docs/ingestion/postgres-snapshot.md` and retained BI-070 as the synchronized active product task.
+- Exact root-file inventory, stale-active-path audit, relative Markdown link validation, focused documentation tests (34), LSP diagnostics, `make lint`, `make test` (458 passed; 49 integration tests deselected), `./scripts/doctor.sh`, and `./scripts/verify.sh` — PASS.
+- `make integration` — NOT RUN because this maintenance task changes documentation paths and one path-sensitive unit test only.
+- Next task: implement BI-070 slice 3 restart-safe chunk reconciliation, immutable raw-before-manifest persistence, replay-from-row-one recovery, and focused Garage integration.

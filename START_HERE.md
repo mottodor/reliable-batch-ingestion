@@ -15,7 +15,7 @@ This file is the short entry point for a new coding-agent session. It is navigat
 | Concern | Canonical file |
 | --- | --- |
 | Agent operating rules | `AGENTS.md` |
-| Product scope and required behavior | `docs/batch-ingestion.md` |
+| Product scope and required behavior | `docs/specification/batch-ingestion.md` |
 | Architectural decisions | `docs/adr/README.md` and accepted ADRs |
 | Active task and atomic backlog | `tasks/backlog.yaml` |
 | Current handoff snapshot | `docs/STATE.md` |

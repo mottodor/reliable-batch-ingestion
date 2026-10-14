@@ -8,7 +8,7 @@ Before changing code or documentation, the agent must:
 
 1. Read `START_HERE.md`.
 2. Read `docs/STATE.md`.
-3. Read `docs/batch-ingestion.md`, excluding **Possible extensions** from the current scope.
+3. Read `docs/specification/batch-ingestion.md`, excluding **Possible extensions** from the current scope.
 4. Read `tasks/backlog.yaml`, confirm that its `active_task_id` matches `docs/STATE.md`, and locate that task.
 5. Read the relevant accepted ADRs from the index in `docs/adr/README.md`.
 6. Run `./scripts/doctor.sh`.
@@ -23,13 +23,13 @@ When requirements conflict, use this precedence:
 1. the user's explicit request in the current task;
 2. `AGENTS.md`;
 3. accepted ADRs;
-4. `docs/batch-ingestion.md`, excluding **Possible extensions**;
+4. `docs/specification/batch-ingestion.md`, excluding **Possible extensions**;
 5. `tasks/backlog.yaml`;
 6. existing implementation and tests.
 
 Document roles are intentionally distinct:
 
-- `docs/batch-ingestion.md` defines product scope and required behavior;
+- `docs/specification/batch-ingestion.md` defines product scope and required behavior;
 - accepted ADRs define binding architectural decisions;
 - `tasks/backlog.yaml` is the canonical machine-readable task list, task status, and active task;
 - `active_task_id` means the task selected for the next or current implementation: it may be `todo` before work starts or `in_progress` when durable partial work exists;

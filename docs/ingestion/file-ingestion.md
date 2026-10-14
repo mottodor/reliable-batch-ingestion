@@ -1,6 +1,6 @@
 # File ingestion contract
 
-This document describes the implemented `BI-060` behavior for bounded, restart-safe supplier-price ingestion from CSV, JSON, and Parquet files. [ADR 0002](adr/0002-use-whole-file-atomicity-for-file-ingestion.md) makes one delivered file the business acceptance unit. The identifier, manifest, summary, source-schema, and shared S3 rules remain governed by [`core-contracts.md`](core-contracts.md), [`source-contracts.md`](source-contracts.md), and [`storage-contract.md`](storage-contract.md).
+This document describes the implemented `BI-060` behavior for bounded, restart-safe supplier-price ingestion from CSV, JSON, and Parquet files. [ADR 0002](../adr/0002-use-whole-file-atomicity-for-file-ingestion.md) makes one delivered file the business acceptance unit. The identifier, manifest, summary, source-schema, and shared S3 rules remain governed by [`core-contracts.md`](../contracts/core-contracts.md), [`source-contracts.md`](../contracts/source-contracts.md), and [`storage-contract.md`](../contracts/storage-contract.md).
 
 The delivery claim is limited to deterministic keys, immutable/idempotent writes, and safe sequential redelivery. S3 movement is recoverable `copy -> verify -> delete`, not an atomic rename. This is not an exactly-once claim, and concurrent writers for the same logical delivery are unsupported.
 

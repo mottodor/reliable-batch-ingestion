@@ -51,6 +51,20 @@ tasks:
       - tasks/backlog.yaml and docs/STATE.md identify BI-010 as the active todo task.
       - BI-010 has explicit scope, dependencies, and verifiable acceptance criteria.
 
+  - id: BI-007
+    title: Documentation information architecture
+    status: done
+    depends_on: [BI-005]
+    scope:
+      - Keep only the implementation plan, current state, and append-only worklog as files directly under docs.
+      - Group the product specification, shared contracts, and source-specific ingestion documentation by responsibility.
+      - Update active links, path-sensitive checks, and future documentation destinations without changing product or architecture contracts.
+    acceptance:
+      - docs contains only IMPLEMENTATION_PLAN.md, STATE.md, and WORKLOG.md as root-level files.
+      - Product, contract, and ingestion documents live under specification, contracts, and ingestion directories respectively.
+      - Active repository references and documentation tests use the new paths while historical WORKLOG entries remain unchanged.
+      - BI-070 remains the synchronized active task and repository verification passes.
+
   - id: BI-010
     title: Core deterministic contracts
     status: done
@@ -67,7 +81,7 @@ tasks:
       - Public functions and models are typed.
       - Identical normalized logical input yields identical batch_id and object key.
       - Different physical attempts yield different run_id values.
-      - Manifest includes every required field from docs/batch-ingestion.md with explicit types and source applicability.
+      - Manifest includes every required field from docs/specification/batch-ingestion.md with explicit types and source applicability.
       - Manifest cardinality, status transitions, terminal states, and UTC timestamp format are documented and tested.
       - Manifest serialization never includes configured secrets.
       - Unit tests cover determinism, checksum chunking, validation, and status mapping.
@@ -197,7 +211,7 @@ tasks:
       - Document at least four failure exercises and recovery commands.
       - Complete integration suite and clean-clone walkthrough.
     acceptance:
-      - Demonstration commands from docs/batch-ingestion.md are implemented.
+      - Demonstration commands from docs/specification/batch-ingestion.md are implemented.
       - Happy path completes in a few minutes on a local workstation.
       - All mandatory failure scenarios have expected state and recovery command.
       - Unit and integration suites pass.

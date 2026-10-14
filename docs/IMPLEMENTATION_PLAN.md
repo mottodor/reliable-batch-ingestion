@@ -1,6 +1,6 @@
 # Implementation plan
 
-This plan decomposes `docs/batch-ingestion.md` into small vertical tasks. **Possible extensions** are deliberately excluded.
+This plan decomposes `docs/specification/batch-ingestion.md` into small vertical tasks. **Possible extensions** are deliberately excluded.
 
 Exact task status, scope, dependencies, and acceptance criteria live only in `tasks/backlog.yaml`.
 
@@ -34,6 +34,15 @@ Outcome: the agent workflow has explicit document ownership and drift checks.
 - confirm `BI-010` as the first product implementation task.
 
 Outcome: version control is ready, while product implementation remains at the planned `BI-010` boundary.
+
+## Maintenance — Documentation information architecture (`BI-007`)
+
+- keep only the implementation plan, current state, and append-only worklog as root-level `docs/` files;
+- group the product specification, shared contracts, and source-specific ingestion documentation by responsibility;
+- update active links, path-sensitive checks, and future documentation destinations without rewriting historical worklog entries;
+- retain BI-070 as the active product task.
+
+Outcome: documentation has a scalable responsibility-based layout without changing product or architecture contracts.
 
 ## Gate 1 — Core contracts (`BI-010`)
 

@@ -364,7 +364,7 @@ def test_terminal_event_is_bounded_structured_and_contains_no_secret_or_local_pa
 
 def test_file_ingestion_documentation_covers_public_contract_and_recovery() -> None:
     repository_root = Path(__file__).resolve().parents[2]
-    contract = (repository_root / "docs/file-ingestion.md").read_text(encoding="utf-8")
+    contract = (repository_root / "docs/ingestion/file-ingestion.md").read_text(encoding="utf-8")
     readme = (repository_root / "README.md").read_text(encoding="utf-8")
     fixture = repository_root / "fixtures/supplier-prices/canonical/valid.csv"
     delivery = _delivery(actual_sha256=sha256(fixture.read_bytes()).hexdigest())
@@ -391,5 +391,5 @@ def test_file_ingestion_documentation_covers_public_contract_and_recovery() -> N
     required_contract_text.update(code.value for code in RejectionCode)
 
     assert all(value in contract for value in required_contract_text)
-    assert "docs/file-ingestion.md" in readme
+    assert "docs/ingestion/file-ingestion.md" in readme
     assert "File failure and recovery exercises" in readme

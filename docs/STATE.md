@@ -4,11 +4,11 @@ Updated: 2026-10-14
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, BI-050 REST API ingestion/backfill, and BI-060 file ingestion are implemented, documented, and acceptance-tested. BI-070 bounded PostgreSQL snapshot implementation is active; slices 1–2 contracts, bounded reader, and one-chunk serializer are complete.
+The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, BI-050 REST API ingestion/backfill, and BI-060 file ingestion are implemented, documented, and acceptance-tested. Documentation is organized by specification, shared contracts, and source-specific ingestion responsibilities. BI-070 bounded PostgreSQL snapshot implementation is active; slices 1–2 contracts, bounded reader, and one-chunk serializer are complete.
 
 ```yaml
 active_task_id: BI-070
-last_completed_task_id: BI-060
+last_completed_task_id: BI-007
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -16,6 +16,7 @@ last_completed_task_id: BI-060
 ## Completed
 
 - the product specification and repository-local agent workflow are recorded;
+- BI-007 keeps only the implementation plan, state, and worklog at the `docs/` root and groups the remaining documentation under `specification/`, `contracts/`, `ingestion/`, `adr/`, and `plans/`;
 - S3-compatible Garage `dxflrs/garage:v2.4.1` was selected in ADR 0001;
 - the Python 3.12/uv foundation, quality gates, and Git repository exist;
 - typed runtime configuration is loaded only through an explicit call and redacts secrets from representations;
@@ -23,7 +24,7 @@ last_completed_task_id: BI-060
 - canonical logical inputs, deterministic `batch_id` and object keys, and unique physical `run_id` values are implemented;
 - manifest schema version 1 defines all required fields, source-specific nullability, one-to-one payload cardinality, UTC serialization, statuses, transitions, and terminal states;
 - the structured final run-summary contract contains every metric required by the product specification;
-- the initial identifier, object-key, and manifest contracts are documented in `docs/core-contracts.md`;
+- the initial identifier, object-key, and manifest contracts are documented in `docs/contracts/core-contracts.md`;
 - unit tests exercise the contracts without network, PostgreSQL, S3, or Compose access;
 - BI-020 has a detailed implementation plan covering pinned images, configuration, bounded readiness, idempotent Garage bootstrap, persistence, lifecycle commands, destructive reset, tests, and documentation;
 - BI-020 slice 1 defines pinned PostgreSQL and Garage Compose services, separate named volumes, bounded healthchecks, secret-free Garage configuration, environment wiring, and static contract tests;
@@ -77,7 +78,7 @@ last_completed_task_id: BI-060
 - the file CLI now exposes strict `run` and `resume` forms, bounded local-file admission, immutable landing staging, optional expected-checksum handling, newline-delimited events/summaries, stable `0/2/3/4/5` exits, and explicit local/S3 resource cleanup;
 - `make ingest-file` uses the ignored environment and delegates both staged and resumed deliveries to the same restart-safe service;
 - live CSV, JSON, and Parquet coverage proves exact happy/rejected bytes, all planned rejection classes, ADR 0002 mixed-file counters, same-name and renamed-content duplicate classifications, unchanged original manifests/run IDs, zero replay raw bytes, and copy/delete interruption convergence through `resume`;
-- `docs/file-ingestion.md` documents the implemented admission, identity/key examples, filename/schema rules, bounds, whole-file semantics, rejection precedence, metrics, duplicate classes, recovery matrix, CLI exits, and sequential-writer limitation;
+- `docs/ingestion/file-ingestion.md` documents the implemented admission, identity/key examples, filename/schema rules, bounds, whole-file semantics, rejection precedence, metrics, duplicate classes, recovery matrix, CLI exits, and sequential-writer limitation;
 - README now includes tested file failure states and recovery actions, while the shared storage contract documents generic exact-key inspection and bounded spooled download;
 - the complete BI-060 offline and local Compose acceptance matrix passes, so BI-060 is done and BI-070 is active;
 - BI-070 has a detailed five-slice test-first plan fixing daily snapshot identity, read-only repeatable-read upper-watermark capture, server-side cursor chunking, deterministic Parquet payloads, exact reconciliation, replay-from-start recovery, CLI semantics, and live interruption evidence;
@@ -101,13 +102,14 @@ last_completed_task_id: BI-060
 
 ## Latest validation
 
-2026-10-14, BI-070 slice 2 bounded reader and serializer:
+2026-10-14, BI-007 documentation information architecture:
 
-- focused snapshot/config unit tests — PASS, 64 tests;
-- `make lint` — PASS, including Ruff formatting/lint and strict mypy;
-- LSP diagnostics and `make test` — PASS, 458 offline tests with 49 integration tests deselected;
+- exact `docs/` root-file inventory and stale-active-path audit — PASS;
+- relative Markdown link-target validation — PASS;
+- focused documentation contract tests — PASS, 34 tests;
+- LSP diagnostics for the changed Python test, `make lint`, and `make test` — PASS, including 458 offline tests with 49 integration tests deselected;
 - `./scripts/doctor.sh` and `./scripts/verify.sh` — PASS;
-- `make integration` — NOT RUN because slice 2 adds fake-connection reader tests and local deterministic serialization only; S3 service integration is slice 3 and live PostgreSQL interruption coverage is slice 4.
+- `make integration` — NOT RUN because this maintenance task changes documentation paths and one path-sensitive unit test only.
 
 ## Next atomic step
 

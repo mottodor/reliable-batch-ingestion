@@ -6,12 +6,12 @@ A learning project for building restart-safe, idempotent batch ingestion from RE
 
 ## Project references
 
-- Product requirements: [`docs/batch-ingestion.md`](docs/batch-ingestion.md)
-- Core deterministic contracts: [`docs/core-contracts.md`](docs/core-contracts.md)
-- Shared S3 storage contract: [`docs/storage-contract.md`](docs/storage-contract.md)
-- Deterministic source contracts: [`docs/source-contracts.md`](docs/source-contracts.md)
-- REST API ingestion contract: [`docs/api-ingestion.md`](docs/api-ingestion.md)
-- File ingestion contract: [`docs/file-ingestion.md`](docs/file-ingestion.md)
+- Product requirements: [`docs/specification/batch-ingestion.md`](docs/specification/batch-ingestion.md)
+- Core deterministic contracts: [`docs/contracts/core-contracts.md`](docs/contracts/core-contracts.md)
+- Shared S3 storage contract: [`docs/contracts/storage-contract.md`](docs/contracts/storage-contract.md)
+- Deterministic source contracts: [`docs/contracts/source-contracts.md`](docs/contracts/source-contracts.md)
+- REST API ingestion contract: [`docs/ingestion/api-ingestion.md`](docs/ingestion/api-ingestion.md)
+- File ingestion contract: [`docs/ingestion/file-ingestion.md`](docs/ingestion/file-ingestion.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
 - Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)
@@ -73,7 +73,7 @@ POST http://localhost:8080/__control/reset?scenario_key=<key>
 POST http://localhost:8080/__control/reset
 ```
 
-The counter store is thread-safe and bounded to 128 keys. Successful page bodies are canonical and byte-stable for the same seed and request; restarting the service clears only transient fault counters. Exact query and fault semantics are documented in [`docs/source-contracts.md`](docs/source-contracts.md).
+The counter store is thread-safe and bounded to 128 keys. Successful page bodies are canonical and byte-stable for the same seed and request; restarting the service clears only transient fault counters. Exact query and fault semantics are documented in [`docs/contracts/source-contracts.md`](docs/contracts/source-contracts.md).
 
 All lifecycle targets are scoped to `COMPOSE_PROJECT_NAME` (default: `reliable-batch-ingestion`). Normal `make down` preserves the three named volumes. Destructive reset is intentionally a separate, irreversible command and requires the exact confirmation token:
 
@@ -104,13 +104,13 @@ make fixtures SOURCE_SEED=20260901        # Replace the committed corpus determi
 make fixtures-check SOURCE_SEED=20260901  # Regenerate twice and compare bytes and semantics.
 ```
 
-Generation validates the seed before changing the output. The check uses temporary directories and does not modify committed fixtures. Exact Parquet bytes are scoped to Python 3.12, the committed `uv.lock`, and the supported local toolchain; schema and logical rows remain the cross-version contract. Scenario paths and serialization details are documented in [`docs/source-contracts.md`](docs/source-contracts.md).
+Generation validates the seed before changing the output. The check uses temporary directories and does not modify committed fixtures. Exact Parquet bytes are scoped to Python 3.12, the committed `uv.lock`, and the supported local toolchain; schema and logical rows remain the cross-version contract. Scenario paths and serialization details are documented in [`docs/contracts/source-contracts.md`](docs/contracts/source-contracts.md).
 
 ## Shared S3 boundary
 
 Application code constructs the path-style SigV4 client explicitly from `StorageConfig`. Botocore standard retries use the configured total-attempt budget, including the initial request, plus explicit connect/read timeouts. Shared operations stream and verify SHA-256 from object bytes; they never treat S3 `ETag` as a SHA-256 checksum.
 
-`S3Storage` provides immutable write, recoverable `copy -> verify -> delete`, and read-only payload/manifest reconciliation. Different content at an existing deterministic key is a conflict, not an overwrite. A move can temporarily leave both source and destination and converges safely when rerun. Concurrent writers for one key remain unsupported because Garage has no versioning and conditional create is not a contract foundation. See [`docs/storage-contract.md`](docs/storage-contract.md) for exact outcomes and recovery states.
+`S3Storage` provides immutable write, recoverable `copy -> verify -> delete`, and read-only payload/manifest reconciliation. Different content at an existing deterministic key is a conflict, not an overwrite. A move can temporarily leave both source and destination and converges safely when rerun. Concurrent writers for one key remain unsupported because Garage has no versioning and conditional create is not a contract foundation. See [`docs/contracts/storage-contract.md`](docs/contracts/storage-contract.md) for exact outcomes and recovery states.
 
 ## REST API ingestion
 
@@ -141,7 +141,7 @@ The mock fault selectors are integration-test controls rather than production CL
 | Stop after some pages | Completed page pairs remain unchanged; the failed non-200 page is absent | Rerun the same command; completed pages are reused |
 | Stop after payload/before manifest | Verified raw payload remains in `payload_only` state | Rerun the same command; only the missing manifest is created |
 
-Exact identity/key examples, retry and `Retry-After` rules, bounds, metric meanings, recovery states, handled error codes, and the sequential-writer limitation are documented in [`docs/api-ingestion.md`](docs/api-ingestion.md).
+Exact identity/key examples, retry and `Retry-After` rules, bounds, metric meanings, recovery states, handled error codes, and the sequential-writer limitation are documented in [`docs/ingestion/api-ingestion.md`](docs/ingestion/api-ingestion.md).
 
 ## File ingestion
 
@@ -174,7 +174,7 @@ Terminal accepted and retained-rejection outcomes emit newline-delimited structu
 | Copy succeeds but landing deletion fails | Landing and destination temporarily contain identical verified bytes | Run the same `resume`; it retries delete and writes the manifest only after convergence |
 | S3 temporarily unavailable or deterministic state conflicts | Existing evidence remains unchanged; no automatic overwrite/cleanup | Restore S3 and rerun; for a conflict, inspect and explicitly repair the exact retained keys first |
 
-Identity/key examples, filename and schema rules, rejection precedence, bounds, metric meanings, duplicate classes, all recovery states, and limitations are documented in [`docs/file-ingestion.md`](docs/file-ingestion.md).
+Identity/key examples, filename and schema rules, rejection precedence, bounds, metric meanings, duplicate classes, all recovery states, and limitations are documented in [`docs/ingestion/file-ingestion.md`](docs/ingestion/file-ingestion.md).
 
 ## Available commands
 

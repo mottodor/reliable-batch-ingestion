@@ -1,6 +1,6 @@
 # Core deterministic contracts
 
-This document defines the initial version of the identifier, object-key, manifest, and run-summary contracts implemented by `BI-010`. It is the baseline contract: changing the manifest or object-key contract after this point requires an ADR, as recorded in [`docs/adr/README.md`](adr/README.md).
+This document defines the initial version of the identifier, object-key, manifest, and run-summary contracts implemented by `BI-010`. It is the baseline contract: changing the manifest or object-key contract after this point requires an ADR, as recorded in [`docs/adr/README.md`](../adr/README.md).
 
 ## Configuration boundary
 

@@ -1,6 +1,6 @@
 # Shared S3 storage contract
 
-This document defines the shared application boundary implemented by `batch_ingestion.storage`: the BI-030 immutable write, movement, and reconciliation primitives plus the generic exact-key read helpers added by BI-060. It supplements the object-key and manifest rules in [`core-contracts.md`](core-contracts.md) and the Garage constraints in [ADR 0001](adr/0001-use-garage-for-s3-compatible-storage.md).
+This document defines the shared application boundary implemented by `batch_ingestion.storage`: the BI-030 immutable write, movement, and reconciliation primitives plus the generic exact-key read helpers added by BI-060. It supplements the object-key and manifest rules in [`core-contracts.md`](core-contracts.md) and the Garage constraints in [ADR 0001](../adr/0001-use-garage-for-s3-compatible-storage.md).
 
 ## Configuration and client construction
 

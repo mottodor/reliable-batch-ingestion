@@ -27,7 +27,7 @@ require_command() {
   fi
 }
 
-if [[ ! -f AGENTS.md || ! -f docs/batch-ingestion.md ]]; then
+if [[ ! -f AGENTS.md || ! -f docs/specification/batch-ingestion.md ]]; then
   fail "run this script from the repository root"
 fi
 
