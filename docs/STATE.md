@@ -4,11 +4,11 @@ Updated: 2026-10-14
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, and BI-050 REST API ingestion/backfill are implemented, documented, and acceptance-tested. BI-060 file ingestion is in progress: ADR 0002 and the detailed test-first implementation plan are complete, while runtime behavior remains unimplemented.
+The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, BI-050 REST API ingestion/backfill, and BI-060 file ingestion are implemented, documented, and acceptance-tested. BI-070 bounded PostgreSQL snapshot ingestion is the next active task and has not started.
 
 ```yaml
-active_task_id: BI-060
-last_completed_task_id: BI-050
+active_task_id: BI-070
+last_completed_task_id: BI-060
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -65,11 +65,25 @@ last_completed_task_id: BI-050
 - README documents only the implemented REST commands and includes tested expected states and recovery actions for rate limiting, permanent HTTP failures, malformed HTTP 200 bodies, partial pages, and payload-only interruption;
 - the complete BI-050 offline and local Compose acceptance matrix passes, so BI-050 is done and BI-060 is active;
 - ADR 0002 selects whole-file atomicity: any required validation failure rejects the complete delivered file, publishes no accepted rows, preserves the original bytes, and uses recoverable `copy -> verify -> delete` movement without claiming an atomic S3 rename;
-- the BI-060 test-first plan fixes supplier source/name/schema rules, content-based identity, deterministic landing/raw/archive/rejected keys, reason-bearing rejection keys, bounded diagnostics and validation, same-name versus renamed-content classification, raw-before-validation ordering, and restart convergence.
+- the BI-060 test-first plan fixes supplier source/name/schema rules, content-based identity, deterministic landing/raw/archive/rejected keys, reason-bearing rejection keys, bounded diagnostics and validation, same-name versus renamed-content classification, raw-before-validation ordering, and restart convergence;
+- BI-060 slice 1 implements strict admission-safe delivery descriptors, source/name/date/format inspection, checksum tokens, content-based identities, canonical payload names, and exact landing/raw/manifest/archive/rejected keys;
+- stable rejection precedence, value-free bounded diagnostics, duplicate classes, ADR 0002 whole-file counters, secret-free terminal event serialization, and explicit file byte/spool/record/Parquet-batch/diagnostic configuration bounds are unit-tested without I/O;
+- BI-060 slice 2 adds one whole-file validation result with no accepted-row subset, strict common supplier-price rules, incremental strict UTF-8 CSV, byte-bounded strict JSON, and exact-schema Parquet validation through configured `iter_batches()`;
+- valid, empty, schema-invalid, mixed, malformed, checksum-mismatched, date-mismatched, type-invalid, business-invalid, record-limited, byte-limited, and diagnostic-limited cases are covered across the applicable formats; every mixed fixture reports exact `3/0/3` counters and validation restores the unchanged source stream position;
+- BI-060 slice 3 adds exact-key inspection plus bounded context-owned S3 downloads that stream SHA-256, enforce declared and actual byte limits, close response bodies, and close seekable spools on every exit path;
+- the file service downloads verified landing or raw evidence, reconciles the canonical raw/manifest pair, preserves raw before validation, probes every finite alternative disposition, converges movement, and writes a terminal manifest only after verified disposition completion;
+- landing-only, payload-only, destination-only, raw-only, complete duplicate, both-after-delete-failure, manifest-only, conflicting-disposition, raw-write failure, move failure, and post-disposition/pre-manifest recovery paths are unit-tested under the sequential-writer contract;
+- live Garage coverage verifies bounded reads and exact valid/rejected CSV bytes under raw and archive/rejected keys, landing absence, and strict succeeded/rejected manifest reconciliation;
+- the file CLI now exposes strict `run` and `resume` forms, bounded local-file admission, immutable landing staging, optional expected-checksum handling, newline-delimited events/summaries, stable `0/2/3/4/5` exits, and explicit local/S3 resource cleanup;
+- `make ingest-file` uses the ignored environment and delegates both staged and resumed deliveries to the same restart-safe service;
+- live CSV, JSON, and Parquet coverage proves exact happy/rejected bytes, all planned rejection classes, ADR 0002 mixed-file counters, same-name and renamed-content duplicate classifications, unchanged original manifests/run IDs, zero replay raw bytes, and copy/delete interruption convergence through `resume`;
+- `docs/file-ingestion.md` documents the implemented admission, identity/key examples, filename/schema rules, bounds, whole-file semantics, rejection precedence, metrics, duplicate classes, recovery matrix, CLI exits, and sequential-writer limitation;
+- README now includes tested file failure states and recovery actions, while the shared storage contract documents generic exact-key inspection and bounded spooled download;
+- the complete BI-060 offline and local Compose acceptance matrix passes, so BI-060 is done and BI-070 is active.
 
 ## Not completed
 
-- file-ingestion runtime behavior and PostgreSQL ingestion;
+- bounded PostgreSQL snapshot ingestion;
 - complete ingestion demo commands.
 
 ## Known limitations and risks
@@ -77,18 +91,22 @@ last_completed_task_id: BI-050
 - Garage has no bucket versioning, and conditional create with `If-None-Match` is not a contract foundation.
 - Concurrent ingestion writers are outside the core contract.
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
-- Ignored `.env` files created before BI-050 must be refreshed with the committed HTTP settings before the full integration target or ingestion CLI can load complete configuration.
+- Ignored `.env` files created before BI-060 slice 1 must be refreshed with the committed HTTP and `FILE_*` settings before the full integration target or ingestion CLI can load complete configuration.
 
 ## Latest validation
 
-2026-10-14, BI-060 implementation planning:
+2026-10-14, BI-060 slice 5 documentation and acceptance closeout:
 
-- `./scripts/doctor.sh` — PASS;
-- backlog JSON Schema validation, repository policy, and `git diff --check` — PASS;
-- `./scripts/verify.sh` — PASS, including locked dependency sync, Ruff formatting/lint, strict mypy, 258 default tests with 22 integration tests deselected, and Compose configuration;
-- LSP diagnostics — NOT RUN because no Python files changed;
-- `make integration` — NOT RUN because this change defines the implementation plan and does not change runtime or infrastructure behavior.
+- `./scripts/doctor.sh`, repository policy, `git diff --check`, Make help, and Compose configuration — PASS;
+- LSP diagnostics for the changed Python contract-test path — PASS with no findings;
+- `make lint` — PASS, including Ruff formatting/lint and strict mypy;
+- `make test` — PASS, 410 default tests with 49 integration tests deselected;
+- focused BI-060 unit matrix — PASS, 142 tests;
+- focused Garage file-ingestion integration — PASS, 26 tests;
+- explicit `make up` and `make seed SOURCE_SEED=20260901` — PASS;
+- `make integration` — PASS, including 49 initial integration tests, repeat seed/bootstrap verification, isolated persistence/reset recovery, and cleanup;
+- `./scripts/verify.sh` — PASS, including locked dependency sync, repository policy, lint, tests, and Compose configuration.
 
 ## Next atomic step
 
-Start BI-060 slice 1 with failing pure tests for file admission, identity/key derivation, rejection diagnostics, duplicate classification, counters, and configuration bounds.
+Create the detailed test-first BI-070 plan for bounded PostgreSQL snapshot identity, watermark, chunking, and restart recovery.

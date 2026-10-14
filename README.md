@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: deterministic core contracts, local Compose infrastructure, shared S3 storage, deterministic sources, and BI-050 REST ingestion/backfill are complete; BI-060 file ingestion is next.
+> Current stage: BI-050 REST ingestion/backfill and BI-060 restart-safe CSV/JSON/Parquet file ingestion are complete; BI-070 bounded PostgreSQL snapshot ingestion is next.
 
 ## Project references
 
@@ -11,6 +11,7 @@ A learning project for building restart-safe, idempotent batch ingestion from RE
 - Shared S3 storage contract: [`docs/storage-contract.md`](docs/storage-contract.md)
 - Deterministic source contracts: [`docs/source-contracts.md`](docs/source-contracts.md)
 - REST API ingestion contract: [`docs/api-ingestion.md`](docs/api-ingestion.md)
+- File ingestion contract: [`docs/file-ingestion.md`](docs/file-ingestion.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
 - Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)
@@ -142,6 +143,39 @@ The mock fault selectors are integration-test controls rather than production CL
 
 Exact identity/key examples, retry and `Retry-After` rules, bounds, metric meanings, recovery states, handled error codes, and the sequential-writer limitation are documented in [`docs/api-ingestion.md`](docs/api-ingestion.md).
 
+## File ingestion
+
+Stage and ingest one local supplier file, optionally checking a supplier-provided SHA-256:
+
+```bash
+make ingest-file ARGS="run --source supplier-prices --date 2026-09-01 --path /path/to/supplier-prices-2026-09-01.csv"
+make ingest-file ARGS="run --source supplier-prices --date 2026-09-01 --path /path/to/supplier-prices-2026-09-01.parquet --expected-sha256 <64-lowercase-hex>"
+```
+
+Resume from a deterministic key printed by an earlier structured event or identified while inspecting storage:
+
+```bash
+make ingest-file ARGS="resume --landing-key 'landing/file/supplier-prices/source_date=2026-09-01/format=csv/content_sha256=<sha256>/expected_sha256=none/supplier-prices-2026-09-01.csv'"
+```
+
+`run` validates the command and bounded local regular file before creating an S3 client, stages the exact bytes immutably, then invokes the same restart-safe service as `resume`. `resume` accepts only one canonical BI-060 landing key and does not need the original local file. Valid files retain exact bytes under canonical raw and archive keys. Invalid files retain exact bytes under canonical raw and reason-bearing rejected keys; parseable mixed files reject the whole delivery and publish no accepted subset.
+
+Terminal accepted and retained-rejection outcomes emit newline-delimited structured JSON with one file event and one run summary; a pre-terminal state/storage failure emits a secret-free CLI error instead of fabricating a business outcome. Stable exits are `0` for an accepted new delivery or accepted duplicate, `2` for command/local admission errors, `3` for invalid configuration, `4` for retained rejection or recoverable ingestion/state failure, and `5` for runtime setup/cleanup failure. Same-name and renamed identical deliveries preserve one raw payload, final disposition, and original manifest while reporting distinct duplicate classes. Movement is recoverable `copy -> verify -> delete`, not an atomic rename; after interruption rerun `resume` with the same landing key. Concurrent writers for one logical delivery remain unsupported.
+
+### File failure and recovery exercises
+
+| Failure | Expected object state | Recovery |
+| --- | --- | --- |
+| Schema/business-invalid or mixed file | Exact bytes under raw and one reason-bearing rejected key; `rejected` manifest; no accepted subset | Correct and redeliver the complete file; retain the rejected evidence |
+| Expected-checksum mismatch | Exact bytes under raw and `reason=checksum_mismatch`; `rejected` manifest | Confirm the supplier checksum/bytes and redeliver corrected input as a new content identity |
+| Same-name redelivery | Same raw/final keys and unchanged original manifest/run ID; `same_name_redelivery` | No action; repeating `run` is idempotent |
+| Same content under a new valid name | Different landing key but the same batch/raw/final keys; `renamed_content` | No action; no second business-data copy is created |
+| Stop after raw/final disposition but before manifest | Raw evidence remains; disposition may remain; manifest is absent | Run `resume` with the original canonical landing key |
+| Copy succeeds but landing deletion fails | Landing and destination temporarily contain identical verified bytes | Run the same `resume`; it retries delete and writes the manifest only after convergence |
+| S3 temporarily unavailable or deterministic state conflicts | Existing evidence remains unchanged; no automatic overwrite/cleanup | Restore S3 and rerun; for a conflict, inspect and explicitly repair the exact retained keys first |
+
+Identity/key examples, filename and schema rules, rejection precedence, bounds, metric meanings, duplicate classes, all recovery states, and limitations are documented in [`docs/file-ingestion.md`](docs/file-ingestion.md).
+
 ## Available commands
 
 ```bash
@@ -157,6 +191,8 @@ make fixtures-check
 make check-local-env
 make ingest-api ARGS="run --source fx-rates --date 2026-09-01"
 make ingest-api ARGS="backfill --source fx-rates --from 2026-09-01 --to 2026-09-07"
+make ingest-file ARGS="run --source supplier-prices --date 2026-09-01 --path /path/to/supplier-prices-2026-09-01.csv"
+make ingest-file ARGS="resume --landing-key 'landing/file/...canonical BI-060 key...'"
 make up
 make down
 make logs
@@ -167,7 +203,7 @@ make reset-destructive CONFIRM=destroy-local-data
 make verify
 ```
 
-File/PostgreSQL ingestion and demonstration targets will be added by their atomic tasks in `tasks/backlog.yaml`. This README does not promise commands before they exist.
+PostgreSQL ingestion and demonstration targets will be added by their atomic tasks in `tasks/backlog.yaml`. This README does not promise commands before they exist.
 
 ## Secrets
 

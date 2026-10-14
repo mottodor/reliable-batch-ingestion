@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-060
+active_task_id: BI-070
 
 status_values:
   - todo
@@ -155,7 +155,7 @@ tasks:
 
   - id: BI-060
     title: File ingestion
-    status: in_progress
+    status: done
     depends_on: [BI-030, BI-040]
     scope:
       - Define deterministic file identity plus landing, raw, archive, rejected, and rejection-diagnostic contracts without changing manifest schema version 1.

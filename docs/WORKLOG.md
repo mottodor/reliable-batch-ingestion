@@ -307,3 +307,59 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Backlog JSON Schema validation, repository policy, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked sync, Ruff, strict mypy, 258 default tests, and Compose configuration.
 - LSP diagnostics and `make integration` — NOT RUN because only planning/state documentation changed.
 - Next task: start BI-060 slice 1 with failing pure admission, identity/key, diagnostic, duplicate, counter, and configuration tests.
+
+## 2026-10-14 — BI-060 slice 1 pure file contracts
+
+- Added test-first pure supplier-file contracts for strict admission-safe source/name/checksum values, filename/date/format inspection, content-based `BatchIdentity`, canonical payload names, and deterministic landing/raw/manifest/archive/rejected keys.
+- Proved same-name bytes retain every key, while renamed identical content changes only the landing key; content, declared format, expected checksum, and validation-contract changes produce distinct batches.
+- Added stable rejection-code precedence, bounded value-free diagnostic ordering/truncation, same-name versus renamed duplicate classification, ADR 0002 whole-file counters, and secret-free terminal event serialization.
+- Added explicit positive file byte, spool, record, Parquet batch, and diagnostic bounds with cross-field spool validation; updated `.env.example` without adding secrets or dependencies.
+- `./scripts/doctor.sh`, LSP diagnostics for 10 changed Python paths, `make lint`, `make test` (297 passed; 22 integration tests deselected), and `./scripts/verify.sh` — PASS.
+- `make integration` — NOT RUN because this slice adds pure contracts/configuration and no S3 or parser runtime path.
+- Next task: start BI-060 slice 2 with failing format-parameterized tests for bounded CSV, JSON, and Parquet whole-file validation.
+
+## 2026-10-14 — BI-060 slice 2 bounded file validation
+
+- Added a whole-file validation result that exposes only acceptance/rejection, bounded value-free diagnostics, and ADR 0002 counters; it never returns or publishes an accepted-row subset.
+- Implemented strict common supplier-price rules plus incremental strict UTF-8 CSV validation, byte-bounded strict JSON validation, and exact non-null Arrow schema validation through `ParquetFile.iter_batches()` without `read_table()`.
+- Covered every committed valid, empty, schema-invalid, and mixed fixture in CSV, JSON, and Parquet; mixed files consistently reject the complete payload with exact `3/0/3` counters.
+- Added format/type/business/date/checksum, malformed UTF-8/parser, missing/extra schema, byte/record/Parquet-batch/diagnostic bound, unchanged-byte, and restored-stream-position tests.
+- Confirmed the PyArrow `ParquetFile.schema_arrow` and bounded `iter_batches(batch_size=...)` APIs against current Context7 `/apache/arrow` documentation; no dependency change was required.
+- `./scripts/doctor.sh`, LSP diagnostics, `make lint`, `make test` (377 passed; 22 integration tests deselected), and `./scripts/verify.sh` — PASS.
+- `make integration` — NOT RUN because this slice adds pure local-stream validation and no S3 runtime path.
+- Next task: start BI-060 slice 3 with failing bounded-download and restart-safe file-service recovery tests.
+
+## 2026-10-14 — BI-060 slice 3 shared-storage reads and restart-safe file service
+
+- Added generic exact-key inspection and bounded context-owned S3 downloads with chunked SHA-256 verification, declared/actual byte limits, explicit missing/conflict/size errors, response-body cleanup, and seekable spool cleanup.
+- Added the file service over a narrow shared-storage protocol: it obtains landing or raw evidence, preserves canonical raw bytes before validation, probes the finite disposition set, converges `copy -> verify -> delete`, and writes the terminal manifest last.
+- Covered landing-only, landing+raw, landing+destination, raw+destination, raw-only, complete redelivery, both-identical after delete failure, manifest-only, alternative-disposition conflict, raw-write failure, move failure, and post-disposition/pre-manifest restart states.
+- Preserved the first complete manifest and `run_id`, classified renamed-content redelivery, emitted whole-file summaries/events, and left transient failures with retryable evidence and no fabricated terminal manifest.
+- Added Garage coverage for bounded reads plus exact valid/rejected raw and archive/rejected bytes, landing removal, and strict terminal manifest reconciliation.
+- Refreshed the ignored local `.env` only with missing committed non-secret HTTP/file bounds so the current integration configuration could load; no credentials or local configuration were committed.
+- Current Boto3 `get_object` streaming-body and `ClientError` behavior was checked against Context7 `/boto/boto3`; no dependency change was required.
+- `./scripts/doctor.sh`, LSP diagnostics, `make lint`, `make test` (396 passed; 25 integration tests deselected), focused Garage tests (7 passed), `make integration` (25 initial integration tests plus recovery checks), and `./scripts/verify.sh` — PASS.
+- Next task: start BI-060 slice 4 with failing file CLI tests for strict `run`/`resume` admission, staging, structured output, stable exits, and resource cleanup.
+
+## 2026-10-14 — BI-060 slice 4 file CLI and all-format recovery matrix
+
+- Added failing CLI tests first for strict `run`/`resume` parsing, canonical dates/checksums/landing keys, bounded local admission before client creation, immutable staging, structured output, stable exits, and local/S3 resource cleanup.
+- Added `batch_ingestion.files.cli` and `make ingest-file`; `run` streams one seekable regular file under `FILE_MAX_BYTES`, derives and stages its deterministic landing key, and `resume` reconstructs the same delivery solely from a canonical key.
+- Mapped accepted deliveries to exit `0`, admission/configuration/handled/runtime outcomes to stable `2/3/4/5` exits, retained business rejections as exit `4`, and kept emitted errors free of paths, payload values, secrets, and backend exception text.
+- Added live CSV/JSON/Parquet happy and rejection coverage for exact raw/disposition bytes, every slice-4 rejection scenario, mixed-file `3/0/3` counters, and strict terminal manifests.
+- Proved same-name and renamed-content replay for every format preserves one canonical raw/disposition/manifest and original `run_id`, reports distinct duplicate classes, and writes zero new raw bytes.
+- Injected a live delete failure after verified copy for every format, inspected landing/raw/archive evidence, then proved `resume` converges to destination-only and completes the missing manifest without data loss.
+- Updated Make help, README command behavior, the BI-060 plan status, and state handoff; BI-060 remains in progress for slice 5 documentation and acceptance closeout.
+- `./scripts/doctor.sh`, focused CLI tests (13), focused integration (26), LSP diagnostics, `make lint`, `make test` (409 passed), Compose configuration, repository policy, `make integration` (49 initial integration tests plus recovery checks), and `./scripts/verify.sh` — PASS.
+- Next task: complete BI-060 slice 5 detailed contract documentation, full acceptance audit, and task closeout.
+
+## 2026-10-14 — BI-060 slice 5 documentation and acceptance closeout
+
+- Added `docs/file-ingestion.md` with the implemented admission boundary, content identity and exact key example, filename/format/schema rules, configuration bounds, raw-before-validation ordering, whole-file semantics, rejection precedence and value-free diagnostics, metric meanings, duplicate classes, manifests, recovery matrix, CLI exits, failure exercises, and sequential-writer limitations.
+- Audited and updated the shared storage contract for generic exact-key inspection and bounded context-owned downloads; updated README references and tested file failure/recovery states without promising unimplemented commands.
+- Added a documentation contract test covering both CLI forms, exact fixture-derived keys, every rejection code and file bound, duplicate classes, and explicit non-claims for atomic rename, exactly-once delivery, and concurrent safety.
+- Confirmed complete BI-060 acceptance evidence for all formats, raw-before-validation preservation, whole-file rejection, same-name and renamed-content redelivery, reason-bearing rejected objects, exact-byte dispositions, and post-copy/delete recovery through `resume`.
+- `./scripts/doctor.sh`, repository policy, `git diff --check`, Make help, Compose configuration, LSP diagnostics, `make test` (410 passed), focused BI-060 units (142 passed), focused file integration (26 passed), explicit startup/seed, and full `make integration` (49 initial integration tests plus recovery checks) — PASS.
+- The first `make lint` formatting check found two quote-style changes in the new test; the test was reformatted and the complete lint gate then passed with Ruff and strict mypy.
+- Marked BI-060 done, selected BI-070, synchronized README/backlog/state/plan, and ran final `./scripts/verify.sh` — PASS.
+- Next task: create the detailed test-first BI-070 plan for bounded PostgreSQL snapshot identity, watermark, chunking, and restart recovery.
