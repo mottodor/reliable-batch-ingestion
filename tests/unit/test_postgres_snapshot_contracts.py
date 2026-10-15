@@ -4,6 +4,7 @@ import importlib
 import json
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 
 import pyarrow as pa
 import pytest
@@ -387,6 +388,39 @@ def test_snapshot_events_errors_and_metrics_are_structured_and_secret_free() -> 
         "batch_id": batch_id,
         "run_id": RUN_ID,
     }
+
+
+def test_postgres_snapshot_documentation_covers_public_contract_and_recovery() -> None:
+    repository_root = Path(__file__).resolve().parents[2]
+    contract = (repository_root / "docs/ingestion/postgres-snapshot.md").read_text(encoding="utf-8")
+    readme = (repository_root / "README.md").read_text(encoding="utf-8")
+    descriptor = _descriptor()
+
+    required_contract_text = {
+        'make ingest-postgres ARGS="run',
+        'make ingest-postgres ARGS="resume',
+        descriptor.raw_key(chunk_ordinal=1, chunk_rows=10),
+        descriptor.manifest_key(chunk_ordinal=1, chunk_rows=10),
+        "POSTGRES_CONNECT_TIMEOUT_SECONDS",
+        "POSTGRES_STATEMENT_TIMEOUT_SECONDS",
+        "SNAPSHOT_MAX_ELAPSED_SECONDS",
+        "SNAPSHOT_CHUNK_ROWS",
+        "SNAPSHOT_MAX_CHUNKS",
+        "SNAPSHOT_MAX_CHUNK_BYTES",
+        "SNAPSHOT_SPOOL_THRESHOLD_BYTES",
+        "REPEATABLE READ",
+        "fetchmany",
+        "payload_only",
+        "source_snapshot_changed",
+        "replay from chunk 1",
+        "not an exactly-once claim",
+        "concurrent writers",
+    }
+    required_contract_text.update(code.value for code in SnapshotErrorCode)
+
+    assert all(value in contract for value in required_contract_text)
+    assert "docs/ingestion/postgres-snapshot.md" in readme
+    assert "PostgreSQL snapshot failure and recovery exercises" in readme
 
 
 def test_snapshot_contract_import_does_not_read_configuration_or_open_clients(

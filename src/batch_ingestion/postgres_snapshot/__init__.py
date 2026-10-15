@@ -27,6 +27,7 @@ from .schema import (
     SnapshotOrderRow,
 )
 from .serializer import SerializedOrderChunk, serialize_order_chunk
+from .service import SnapshotIngestionResult, SnapshotStorage, ingest_order_snapshot
 
 __all__ = [
     "MAX_CHUNK_ORDINAL",
@@ -44,11 +45,14 @@ __all__ = [
     "SnapshotEvent",
     "SnapshotEventType",
     "SnapshotHandledError",
+    "SnapshotIngestionResult",
     "SnapshotOrderRow",
+    "SnapshotStorage",
     "SerializedOrderChunk",
     "canonical_utc_timestamp",
     "chunk_payload_name",
     "create_postgres_connection",
+    "ingest_order_snapshot",
     "is_supported_source",
     "open_order_snapshot",
     "parse_canonical_utc_timestamp",
