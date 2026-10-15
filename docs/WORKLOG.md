@@ -539,3 +539,43 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `./scripts/doctor.sh`, exact inventory capture, repository policy, backlog JSON Schema validation, `git diff --check`, report structure/population, LSP diagnostics, `make lint`, `make test` (521 passed; 66 integration tests deselected), Compose rendering, and `./scripts/verify.sh` — PASS.
 - Retained two failed ad hoc backlog-validator attempts: uv lacked PyYAML/JSON Schema and Ruby was unavailable; validation then passed through the already available system-Python YAML/JSON Schema libraries. Isolated live integration and clean-export evidence were deliberately not inferred from earlier sessions.
 - Next task: execute BI-090 slice 2 adversarial static review and convert mapped source/document observations into evidence-backed candidate findings without implementing repairs.
+
+## 2026-10-15 — BI-090 slice 2 adversarial static review
+
+- Reviewed every traceability row against implementation bodies, focused unit/integration coverage, operator documentation, dependency and Compose surfaces, reliability bounds, cleanup behavior, and module boundaries without changing product code, contracts, tests, dependencies, README, or accepted ADRs.
+- Assigned grouped static status to the complete product, ADR, and completed-backlog matrices while retaining every fresh-runtime cell as `UNVERIFIED` for slices 3–4; static PASS means source/test/document closure only, not inferred runtime acceptance.
+- Recorded BI-090-F02: REST persists only per-page manifests and an ephemeral `RunSummary`, despite the specification and BI-050 scope requiring a persisted manifest for the complete logical run; repair requires an ADR because cardinality and key contracts would change.
+- Recorded BI-090-F03: backend S3 exceptions can bypass source terminal events and final `RunSummary` emission in REST, file, and snapshot paths; a bounded API reproduction emitted neither event nor summary.
+- Recorded BI-090-F04: HTTPX response iteration requests a response-sized buffered chunk and checks the monotonic deadline only after a yield, so a below-read-timeout trickle crossed a one-second total budget and consumed for six seconds before detection.
+- Recorded BI-090-F05: the local initializer/preflight validates only infrastructure fields but README claims validation of HTTP, file, PostgreSQL, and snapshot application bounds; an application-incomplete environment reproduced a false PASS.
+- Confirmed statically that standard external clients remain centralized, snapshot extraction has no `SELECT *`/`fetchall()`, images are pinned, ETag is not used as SHA-256, destructive reset is explicit, cleanup is project-scoped, and no Possible extension or out-of-scope service was introduced.
+- Checked HTTPX 0.28.1 `Response.iter_raw(chunk_size=...)` buffering and read-timeout semantics against current Context7 `/encode/httpx/0.28.1` documentation.
+- Retained ignored supporting evidence at `artifacts/audit/BI-090-slice2/`; repository policy, `git diff --check`, deterministic reproductions/static scans, and `./scripts/verify.sh` — PASS. Verify included doctor, locked sync, Ruff, strict mypy, 521 offline tests, and Compose rendering.
+- LSP diagnostics — NOT RUN because slice 2 changed documentation only. Isolated clean export and `make integration` — NOT RUN because they are the explicitly separate fresh-runtime scope of slice 3.
+- BI-090 remains `in_progress`; no repair task is opened until final finding disposition. Next task: execute slice 3 isolated clean-export, full local integration/recovery, and exact cleanup validation with fresh timestamped evidence.
+
+## 2026-10-15 — BI-090 slice 3 fresh bounded validation
+
+- Freshly ran the complete audit validation matrix from product revision `6c4249977d3f1ccdebf0a98684e5e3139e15473d` plus audit-only documentation edits; corrected the report's post-baseline full-hash typo without changing the frozen `a1ef506f` baseline.
+- Doctor, repository policy, backlog JSON Schema/active-state validation, `git diff --check`, `make lint`, `make test` (521 passed; 66 integration deselected), and Compose rendering passed with timestamped ignored logs.
+- The isolated clean-export harness passed locked setup, startup/seed, all four public demos, offline tests, exact inspection, redaction, and cleanup in 24.44 seconds; the warm happy path took 1.73 seconds and enforced 6 raw, 6 manifest, 1 archive, 2 rejected, and 0 landing objects.
+- Created an owner-only audit environment with generated credentials, unique bucket/project `bi090-audit-f3cf9dbe8106`, and four unique loopback ports only after proving that project and the fixed recovery project had no existing Compose-labeled resources.
+- Isolated `make integration` passed all 66 API/file/infrastructure/mock/snapshot/source/recovery/storage cases in 77.23 seconds, then passed four repeat-seed marker cases and the bounded persistence, fail-closed reset, destructive-reset, and protected-project recovery check.
+- Exact cleanup removed the audit containers, network, volumes, and uniquely owned integration/clean-export images. No labeled container/network/volume remained for any exercised project, all three default-project volume-inspection hashes matched before and after, evidence logs contained no generated credentials or recognizable supplier values, and the temporary credential file was deleted.
+- Retained one auxiliary cleanup-check failure: the first assertion incorrectly required absence of the fixed recovery image without fingerprinting its pre-run existence. The corrected ownership-scoped assertion excluded that unattributed reusable image and passed; no product check was rerun or hidden, and no protected state changed.
+- Fresh broad gates corroborate the happy, recovery, replay, exact-byte, and cleanup paths but do not resolve F01–F05: the suites do not require an aggregate run manifest or backend-failure summaries, do not model an indefinitely trickling success response, and accept the partial local preflight.
+- Updated only `docs/audits/BI-090.md`, `docs/STATE.md`, and this append-only worklog. No product code, tests, dependencies, contracts, README behavior, backlog task status, or ADR changed; BI-090 remains active and `in_progress`.
+- `./scripts/verify.sh` — PASS after the slice-3 report/state update: doctor, policy, locked sync, Ruff, strict mypy, 521 offline tests, and Compose rendering. LSP diagnostics — NOT RUN because only Markdown changed.
+- Next task: execute BI-090 slice 4 by finalizing every finding and traceability status, creating bounded maintenance tasks for supported root causes, and closing the audit without implementing repairs.
+
+## 2026-10-15 — BI-090 slice 4 findings and closeout
+
+- Finalized BI-090-F01–F05 without changing product behavior: the frozen-baseline reproducibility gap, missing persisted REST logical-run manifest, missing terminal summaries on raw S3 failures, unbounded slow-trickle HTTP response consumption, and incomplete local application preflight all remain supported.
+- Replaced all temporary traceability statuses with 133 final PASS/FAIL outcomes tied to the slice-2 static groups, slice-3 fresh runtime groups, or an exact finding; no row remains BLOCKED, NOT RUN, or unverified at closeout.
+- Added bounded follow-up tasks BI-091 through BI-096. BI-091 records the required aggregate-manifest ADR before BI-092 implementation; BI-093, BI-094, BI-095, and BI-096 independently address F03, F04, F05, and F01.
+- Marked BI-090 done, selected BI-091 as the next todo task, synchronized the plan/backlog/state/report, and left BI-010 through BI-080 closed.
+- Changed no product code, tests, dependencies, contracts, README behavior, accepted ADR, Compose configuration, or fixture; Possible extensions remain excluded.
+- Retained two closeout-check mistakes rather than hiding them: an ad hoc validator called nonexistent `jsonschema.loads`, then an instrumented checker expected 140 instead of the actual 133 matrix rows and its wrapper masked that assertion exit. The corrected schema/state/matrix/finding/task/policy/diff gate passed.
+- `./scripts/verify.sh` — PASS: doctor, repository policy with BI-091 active and BI-090 done, locked sync, Ruff, strict mypy, 521 offline tests, and Compose rendering.
+- LSP diagnostics over the five changed YAML/Markdown paths — PASS with no error or warning; the spell checker reported six information-only suggestions inside generated hexadecimal identifiers.
+- Next task: execute BI-091 only by accepting the ADR for aggregate REST logical-run manifest cardinality, keys, linkage, completion, reconciliation, replay, and compatibility; do not implement BI-092 behavior in that task.

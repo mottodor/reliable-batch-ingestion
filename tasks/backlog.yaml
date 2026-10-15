@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-090
+active_task_id: BI-091
 
 status_values:
   - todo
@@ -222,7 +222,7 @@ tasks:
 
   - id: BI-090
     title: Independent post-completion acceptance audit
-    status: in_progress
+    status: done
     depends_on: [BI-080]
     scope:
       - Freeze the exact audited baseline and independently trace every in-scope specification, accepted ADR, and completed-task acceptance requirement through implementation, tests, documentation, and fresh evidence.
@@ -234,3 +234,82 @@ tasks:
       - The audit records prioritized findings with exact authority and evidence, or explicitly records that no findings were identified.
       - Any required follow-up is decomposed into a separate bounded maintenance task before implementation; completed product tasks are not reopened implicitly.
       - Audit execution changes no product code, tests, dependencies, contracts, or ADRs, and the backlog/state handoff remains synchronized.
+
+  - id: BI-091
+    title: Decide the REST logical-run manifest contract
+    status: todo
+    depends_on: [BI-090]
+    scope:
+      - Resolve BI-090-F02 with an ADR before any implementation changes.
+      - Define aggregate REST logical-run manifest cardinality, deterministic identity and key placement, linkage to page manifests, terminal states, reconciliation, and replay semantics.
+      - Preserve immutable page payloads/manifests and the sequential-writer limitation; do not implement the selected contract in this task.
+    acceptance:
+      - An accepted ADR explicitly resolves the specification requirement for a complete logical-run manifest and compares bounded alternatives.
+      - The decision defines deterministic keys, schema/version strategy, page linkage, completion criteria, failure/recovery states, and compatibility with existing page evidence.
+      - BI-092 is refined against the accepted decision without changing runtime behavior, tests, dependencies, or existing stored evidence in BI-091.
+
+  - id: BI-092
+    title: Persist and reconcile REST logical-run manifests
+    status: todo
+    depends_on: [BI-091]
+    scope:
+      - Implement the aggregate REST logical-run manifest contract accepted by BI-091.
+      - Add restart-safe reconciliation after all page evidence is complete without rewriting existing immutable page payloads or manifests.
+      - Update focused tests and operator documentation for success, partial runs, replay, backfill, and conflicts.
+    acceptance:
+      - A successful logical REST run leaves one deterministic aggregate manifest linked to the exact page evidence required by the accepted ADR.
+      - Partial runs never claim completion; rerun converges to one aggregate manifest without duplicate raw pages or mutation of prior page evidence.
+      - Unit and Garage integration tests cover absent, complete, replay, conflict, and interrupted aggregate-manifest states.
+      - API/backfill documentation and exact inventory inspection describe and validate the new manifest state without claiming exactly-once delivery.
+
+  - id: BI-093
+    title: Emit terminal summaries for backend storage failures
+    status: todo
+    depends_on: [BI-090]
+    scope:
+      - Resolve BI-090-F03 by normalizing backend S3 failures at the REST, file, and PostgreSQL snapshot service boundaries.
+      - Emit exactly one source terminal failure event and final RunSummary for attempted ingestions while preserving exception chaining and stable CLI exits.
+      - Add focused offline and isolated unavailable-S3 coverage without swallowing backend exceptions or exposing secret values.
+    acceptance:
+      - S3 setup, inspection, read, and write failures in each source path emit one terminal event and one final summary with all required metrics and stable trace identifiers.
+      - Events and summaries contain no credentials, DSNs, payload values, raw backend exception text, or duplicate terminal records.
+      - Existing retained evidence and retry/recovery semantics remain unchanged, and focused unit plus local integration tests pass.
+
+  - id: BI-094
+    title: Enforce the REST total response deadline
+    status: todo
+    depends_on: [BI-090]
+    scope:
+      - Resolve BI-090-F04 by enforcing the configured monotonic elapsed deadline while streaming successful HTTP response bodies.
+      - Retain the response-byte ceiling, per-operation HTTPX timeouts, bounded retries, raw-before-parse ordering, and context-owned spool cleanup.
+      - Add deterministic slow-trickle tests that do not use arbitrary sleeps or the public network.
+    acceptance:
+      - A peer that yields bytes below the read-timeout threshold cannot keep response consumption alive beyond the configured total elapsed budget.
+      - Deadline failure has the existing stable handled classification, closes response/spool resources, persists no incomplete raw page, and emits the required terminal output.
+      - Normal chunked responses, 429 handling, retry budgets, malformed-body preservation, and live API ingestion continue to pass.
+
+  - id: BI-095
+    title: Align local preflight with application configuration
+    status: todo
+    depends_on: [BI-090]
+    scope:
+      - Resolve BI-090-F05 by making initialization/preflight and README claims cover the same configuration surface.
+      - Reuse a redacting full-application validation path for HTTP, file, PostgreSQL, snapshot, logging, and S3 settings before atomic environment publication.
+      - Preserve owner-only, placeholder-limited, symlink-safe, idempotent initialization and never print generated values.
+    acceptance:
+      - Preflight rejects missing, malformed, or cross-field-invalid application settings that would make AppConfig loading fail.
+      - Initialization publishes nothing when full validation fails and remains byte-stable on a valid rerun.
+      - Tests cover omitted HTTP, file, PostgreSQL, snapshot, logging, and S3 settings plus redaction, and README exactly matches the validated surface.
+
+  - id: BI-096
+    title: Attest clean-commit core reproducibility
+    status: todo
+    depends_on: [BI-090]
+    scope:
+      - Resolve the remaining BI-090-F01 follow-up by validating the completed audited source set from an exact named clean committed checkout.
+      - Run the bounded clean-export walkthrough and repository gates without copying uncommitted product or audit files into the source set.
+      - Record revision, clean status, commands, timings, exact inspection, cleanup, and protected-resource evidence without changing product behavior.
+    acceptance:
+      - The named revision contains every required snapshot, demo, clean-export, test, and operator-document path and begins with an empty Git status.
+      - The clean-checkout walkthrough passes locked setup, doctor, Compose rendering, seed, all four demos, offline tests, exact final inspection, and bounded cleanup.
+      - Audit-owned resources are absent afterward, protected fingerprints are unchanged, and the evidence does not reclassify or erase BI-090's original dirty baseline.

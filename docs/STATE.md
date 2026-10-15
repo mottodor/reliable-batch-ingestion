@@ -4,11 +4,11 @@ Updated: 2026-10-15
 
 ## Current stage
 
-The complete core lab through BI-080 is implemented, documented, and acceptance-tested. It includes deterministic contracts and sources, pinned local infrastructure, the shared S3 boundary, REST/backfill, whole-file ingestion, bounded PostgreSQL snapshots, all public demos, exact read-only inspection, all mandatory recovery scenarios, and an isolated clean-export walkthrough. BI-090 is in progress: slice 1 froze an exact dirty-worktree baseline, recorded its clean-commit reproducibility gap, and built the authority-derived requirement traceability inventory. Static and runtime evidence remains unverified. The audit adds no product scope or Possible extensions.
+The core lab through BI-080 remains implemented, but BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and five requirement-specific findings remain actionable. BI-091 through BI-096 separate the ADR, repairs, and clean-commit attestation without reopening completed product tasks or adding Possible extensions. BI-091 is selected next because F02 changes manifest cardinality/key semantics and therefore requires an architectural decision before implementation.
 
 ```yaml
-active_task_id: BI-090
-last_completed_task_id: BI-080
+active_task_id: BI-091
+last_completed_task_id: BI-090
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -119,12 +119,25 @@ last_completed_task_id: BI-080
 - the complete BI-080 unit, integration, clean-export, repository-policy, and verification acceptance matrix passes, so BI-080 is done and the core product scope is complete;
 - BI-090 has an implementation-ready four-slice audit plan fixing the independence boundary, exact baseline provenance, full requirement traceability, adversarial static review, isolated fresh validation, finding schema, and separate maintenance-task handoff;
 - BI-090 slice 1 recorded the exact `dirty_worktree` baseline at `HEAD` `a1ef506fd13545467c6caf6c04eb803ab2c77461`, a 158-path byte inventory, tool versions, full status, and all paths/hashes that diverged from the commit;
-- the audit report maps every in-scope specification requirement, accepted-ADR obligation, and completed BI-000–BI-080 acceptance criterion to candidate implementation, tests, and documentation with explicit `UNVERIFIED` evidence status;
-- BI-090-F01 records that the frozen `HEAD` lacks completed snapshot/demo/clean-export files present only in the dirty export, so that baseline cannot be described as a clean committed checkout.
+- the audit report maps every in-scope specification requirement, accepted-ADR obligation, and completed BI-000–BI-080 acceptance criterion to implementation, tests, documentation, and final PASS/FAIL evidence;
+- BI-090-F01 confirms that the frozen `HEAD` lacks completed snapshot/demo/clean-export files present only in the dirty export, so that baseline cannot be described as a clean committed checkout;
+- BI-090-F02 confirms that page manifests plus an ephemeral summary do not satisfy the explicit persisted logical-run-manifest requirement;
+- BI-090-F03 confirms that raw backend S3 failures can bypass source terminal events and the required final `RunSummary`;
+- BI-090-F04 confirms that buffered HTTP response iteration can consume a continuously trickling response beyond the configured total elapsed budget;
+- BI-090-F05 confirms that local preflight accepts incomplete application configuration despite the broader README validation claim;
+- BI-090 freshly passed policy/backlog synchronization, Ruff/format/mypy, 521 offline tests, Compose rendering, the isolated clean-export walkthrough, 66 integration tests, repeat-seed marker verification, and bounded infrastructure persistence/reset recovery;
+- the clean export completed in 24.44 seconds with a 1.73-second warm happy path and exact inspected counts of 6 raw, 6 manifests, 1 archive, 2 rejected, and 0 landing objects;
+- live audit state used unique project/bucket/ports and owner-only generated credentials; cleanup removed its containers, networks, volumes, and uniquely owned images, deleted the credential file, and preserved all three default-project volume fingerprints;
+- BI-090 slice 4 finalized all five findings, closed every traceability row, created BI-091 through BI-096 as bounded follow-up, marked the audit done, and changed no product code, tests, dependency, contract, README behavior, or ADR.
 
 ## Not completed
 
-- BI-090 slices 2–4: adversarial static review, isolated fresh validation, final evidence statuses/findings, and closeout; no core implementation or Possible extension is active.
+- BI-091: decide the REST aggregate logical-run manifest contract in an accepted ADR before implementation;
+- BI-092: implement and reconcile that accepted aggregate manifest contract;
+- BI-093: emit terminal events and final summaries for backend S3 failures;
+- BI-094: enforce the REST total monotonic deadline during response streaming;
+- BI-095: align local initialization/preflight with full application configuration;
+- BI-096: attest the completed source set from an exact clean committed checkout.
 
 ## Known limitations and risks
 
@@ -132,16 +145,20 @@ last_completed_task_id: BI-080
 - Concurrent ingestion writers are outside the core contract.
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
 - Ignored `.env` files created before BI-070 slice 1 must be refreshed with the committed HTTP, `FILE_*`, PostgreSQL timeout, and `SNAPSHOT_*` settings before integration targets or ingestion CLIs can load complete configuration.
+- BI-090-F01–F05 are confirmed and not repaired; the exact failed traceability rows and follow-up task mapping are authoritative in `docs/audits/BI-090.md`.
 
 ## Latest validation
 
-2026-10-15, BI-090 slice 1 baseline and traceability:
+2026-10-15, BI-090 final acceptance audit:
 
-- `./scripts/doctor.sh`, exact baseline/inventory capture, repository policy, backlog JSON Schema validation, `git diff --check`, and audit report structure/population — PASS;
-- active LSP diagnostics across all 17 changed/untracked Python paths, `make lint`, `make test` (521 passed; 66 integration tests deselected), Compose rendering, and `./scripts/verify.sh` — PASS;
-- two initial ad hoc backlog-validation commands failed because uv lacked PyYAML/JSON Schema and Ruby was unavailable; the available system-Python YAML/JSON Schema path then passed, and the audit report retains both failed attempts;
-- isolated clean-export and `make integration` — NOT RUN in slice 1; requirement rows remain `UNVERIFIED` rather than inheriting PASS from broad gates or earlier claims.
+- doctor, repository policy, backlog JSON Schema/active-state validation, `git diff --check`, `make lint`, `make test` (521 passed; 66 integration deselected), and Compose rendering — PASS;
+- isolated clean export — PASS: all four public demos, exact inspection, offline tests, 1.73-second warm happy path, 24.44-second walkthrough, and internal cleanup/protected comparison;
+- isolated `make integration` — PASS: all 66 integration tests, 4 repeat-seed marker checks, and bounded persistence/destructive-reset recovery;
+- ownership-scoped cleanup, protected default-project fingerprint comparison, evidence secret/payload scan, and credential-file removal — PASS;
+- the first auxiliary post-cleanup assertion — FAIL because it assumed ownership of an unfingerprinted reusable fixed-project image; the corrected ownership-scoped check passed, and both outcomes are retained rather than hidden;
+- all requirement matrices now contain only final PASS/FAIL outcomes, and F01–F05 map to BI-091 through BI-096;
+- slice-4 backlog schema, repository policy, `git diff --check`, and final `./scripts/verify.sh` closeout results are recorded in the audit report.
 
 ## Next atomic step
 
-Execute BI-090 slice 2: adversarially inspect every mapped implementation, test, documentation, reliability, and cleanup path and record evidence-backed candidate findings without changing product files.
+Execute BI-091 only: write and accept the ADR that defines deterministic aggregate REST logical-run manifest cardinality, keys, page linkage, terminal/reconciliation states, replay, and compatibility; do not implement BI-092 behavior in the same task.
