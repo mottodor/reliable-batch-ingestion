@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: BI-050 REST ingestion/backfill and BI-060 restart-safe CSV/JSON/Parquet file ingestion are complete; BI-070 bounded PostgreSQL snapshot ingestion is next.
+> Current stage: the core lab is implemented and acceptance-tested through BI-080, including public demos, all mandatory recovery scenarios, exact inspection, and the isolated clean-export walkthrough. A bounded independent post-completion audit is selected next.
 
 ## Project references
 
@@ -12,6 +12,8 @@ A learning project for building restart-safe, idempotent batch ingestion from RE
 - Deterministic source contracts: [`docs/contracts/source-contracts.md`](docs/contracts/source-contracts.md)
 - REST API ingestion contract: [`docs/ingestion/api-ingestion.md`](docs/ingestion/api-ingestion.md)
 - File ingestion contract: [`docs/ingestion/file-ingestion.md`](docs/ingestion/file-ingestion.md)
+- PostgreSQL snapshot contract: [`docs/ingestion/postgres-snapshot.md`](docs/ingestion/postgres-snapshot.md)
+- Recovery demos and clean-export walkthrough: [`docs/ingestion/recovery-demos.md`](docs/ingestion/recovery-demos.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
 - Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)
@@ -33,14 +35,14 @@ The **Possible extensions** section is outside the current scope.
 
 ```bash
 cp .env.example .env
-# Replace every change-me value and set GARAGE_RPC_SECRET to 64 hexadecimal characters.
+make init-local-env  # Replace only recognized placeholders atomically without printing values.
 make doctor
 make policy
 make setup
 make verify
 ```
 
-`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. The preflight also validates `MOCK_API_PORT` and requires positive `S3_TOTAL_MAX_ATTEMPTS`, `S3_CONNECT_TIMEOUT_SECONDS`, and `S3_READ_TIMEOUT_SECONDS` values. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
+`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. The preflight also validates `MOCK_API_PORT` and the positive HTTP, file, PostgreSQL timeout, snapshot, and S3 bounds from `.env.example`. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
 
 ## Local infrastructure
 
@@ -176,6 +178,84 @@ Terminal accepted and retained-rejection outcomes emit newline-delimited structu
 
 Identity/key examples, filename and schema rules, rejection precedence, bounds, metric meanings, duplicate classes, all recovery states, and limitations are documented in [`docs/ingestion/file-ingestion.md`](docs/ingestion/file-ingestion.md).
 
+## PostgreSQL snapshot ingestion
+
+Capture one bounded daily `orders` snapshot after starting and seeding the local services:
+
+```bash
+make up
+make seed SOURCE_SEED=20260901
+make ingest-postgres ARGS="run --source orders --date 2026-09-01"
+```
+
+The `snapshot_started` NDJSON event contains the complete descriptor needed if that attempt is interrupted. Resume a non-empty snapshot with exactly those emitted values:
+
+```bash
+make ingest-postgres ARGS="resume --source orders --date 2026-09-01 --upper-updated-at 2026-09-01T14:11:00.000000Z --upper-order-id 202609010024 --expected-record-count 24"
+```
+
+Resume an emitted empty descriptor with:
+
+```bash
+make ingest-postgres ARGS="resume --source orders --date 2026-09-01 --empty"
+```
+
+The sole production source is `orders`. `run` captures a count and inclusive `(updated_at, order_id)` upper watermark inside the selected UTC day, then reads seven explicit columns through a named server-side cursor in one read-only `REPEATABLE READ` transaction. Only one configured row chunk and its bounded Parquet serialization are live at a time. Every deterministic raw chunk is verified before its one succeeded manifest is written.
+
+Recovery always revalidates the emitted descriptor and replays from chunk 1. Complete chunks and their original manifests/run IDs are preserved, `payload_only` chunks receive only the missing manifest, and conflicting evidence is never overwritten. Output is compact newline-delimited JSON with start/chunk/terminal events and a final run summary. Stable exits are `0` success, `2` invalid command/descriptor, `3` invalid configuration, `4` handled ingestion failure, and `5` runtime setup/cleanup failure. Concurrent writers remain unsupported, and this is not an exactly-once claim.
+
+### PostgreSQL snapshot failure and recovery exercises
+
+| Failure | Expected object state | Recovery |
+| --- | --- | --- |
+| PostgreSQL connection interruption after a complete chunk | Earlier raw/manifest pairs remain unchanged; no mutable checkpoint or failed manifest is created | Restore PostgreSQL and `resume` with every descriptor field from `snapshot_started`; replay starts at chunk 1 |
+| S3 temporarily unavailable | Existing complete or `payload_only` evidence remains; bounded attempts end non-zero | Restore S3 and run the same exact `resume` |
+| Stop after raw upload/before manifest | Verified Parquet exists as `payload_only`; its manifest is absent | Run the same `resume`; only the missing manifest is added |
+| Source changes at/below the upper tuple | Existing evidence is unchanged; resume fails as source drift or immutable conflict | Restore the bounded source state, or retain old evidence and use a reviewed fresh `run`; never overwrite old keys |
+| Row inserted above the upper tuple | The original bounded batch excludes the row | Finish the original `resume`; use a later fresh `run` for another capture |
+| Idempotent replay | Exact inventory/checksums and original manifests/run IDs remain unchanged; no raw bytes are written | No action; the matching `resume` is safe |
+
+Exact columns/schema, identity and key examples, transaction/watermark behavior, bounds, metric meanings, error codes, recovery states, and limitations are documented in [`docs/ingestion/postgres-snapshot.md`](docs/ingestion/postgres-snapshot.md).
+
+## Public demonstrations
+
+After explicit environment initialization, healthy services, and deterministic seeding, run the four specification demos:
+
+```bash
+make init-local-env
+make up
+make seed SOURCE_SEED=20260901
+make demo-happy-path
+make demo-duplicate
+make demo-api-retry
+make demo-bad-file
+make demo-inspect
+```
+
+The demos supervise every ingestion subprocess with `DEMO_TIMEOUT_SECONDS` (default `210`), relay the existing ingestion NDJSON, emit exact `demo_state` assertions, and finish with one `demo_summary`. Reports and non-secret descriptors are written below ignored `artifacts/demo/<compose-project>/`; `demo-inspect` reads those descriptors and verifies only calculated S3 prefixes. Inspection streams actual bytes for SHA-256 rather than trusting `ETag`, strictly parses manifests, verifies file dispositions, and validates snapshot Parquet schema, row order, count, and upper tuple.
+
+`demo-happy-path` uses the existing production REST, file, and PostgreSQL CLIs. `demo-duplicate` verifies unchanged canonical object and manifest bytes across API/snapshot replay plus same-name and renamed-content file delivery. `demo-api-retry` uses a demo-only child adapter to select the mock API's one-time 429 fault while still calling the production ingestion primitive; no fault flag is added to a production CLI. `demo-bad-file` retains canonical-name schema-invalid and malformed UTF-8 files under raw/rejected keys, then safely delivers corrected valid content without deleting rejected evidence.
+
+The demos preserve evidence and never reset a matching batch. They require sequential writers and claim deterministic keys, idempotent writes, safe redelivery, and exact read-only inspection—not exactly-once delivery, atomic S3 rename, or concurrent-writer safety.
+
+Run one allow-listed failure and recovery exercise with:
+
+```bash
+make demo-recovery SCENARIO=payload-before-manifest
+```
+
+The allow-list covers `api-rate-limit`, `api-permanent-500`, `api-malformed-json`, `api-after-page`, `file-same-name`, `file-renamed-content`, `file-schema-invalid`, `file-during-move`, `postgres-connection-drop`, `s3-unavailable`, and `payload-before-manifest`. The wrapper exits `0` only after the expected underlying failure, exact intermediate state, and normal recovery or terminal action are verified. Abrupt boundaries use private demo workers; production CLIs expose no fault flags.
+
+Each scenario's trigger, expected underlying exit, retained object state, normal command/action, final state, and limitations are documented in [`docs/ingestion/recovery-demos.md`](docs/ingestion/recovery-demos.md). Malformed HTTP 200 content is deliberately terminal under its original identity: unchanged rerun re-surfaces the failed pair, while corrected bytes require a reviewed new logical identity.
+
+To validate the complete flow from repository-owned, non-ignored files in a unique project with bounded setup and exact cleanup:
+
+```bash
+uv run python scripts/check_clean_export.py
+```
+
+The harness creates an isolated export and owner-only environment, runs locked setup, doctor, Compose rendering, seed, all four public demos, offline tests, and `demo-inspect`, then removes only its unique containers, network, and volumes through exact destructive confirmation. It compares protected default-project volume fingerprints before and after, rejects secrets/payload values in output and reports, and emits a final `clean_export_summary` separating setup, warm happy-path, and total duration. First-time dependency/image acquisition is setup time; only the warm happy path has the validated three-minute budget.
+
 ## Available commands
 
 ```bash
@@ -188,11 +268,21 @@ make lint
 make test
 make fixtures
 make fixtures-check
+make init-local-env
 make check-local-env
 make ingest-api ARGS="run --source fx-rates --date 2026-09-01"
 make ingest-api ARGS="backfill --source fx-rates --from 2026-09-01 --to 2026-09-07"
 make ingest-file ARGS="run --source supplier-prices --date 2026-09-01 --path /path/to/supplier-prices-2026-09-01.csv"
 make ingest-file ARGS="resume --landing-key 'landing/file/...canonical BI-060 key...'"
+make ingest-postgres ARGS="run --source orders --date 2026-09-01"
+make ingest-postgres ARGS="resume --source orders --date 2026-09-01 --empty"
+make demo-happy-path
+make demo-duplicate
+make demo-api-retry
+make demo-bad-file
+make demo-recovery SCENARIO=payload-before-manifest
+make demo-inspect
+uv run python scripts/check_clean_export.py
 make up
 make down
 make logs
@@ -203,7 +293,7 @@ make reset-destructive CONFIRM=destroy-local-data
 make verify
 ```
 
-PostgreSQL ingestion and demonstration targets will be added by their atomic tasks in `tasks/backlog.yaml`. This README does not promise commands before they exist.
+`demo-recovery` accepts only the eleven documented scenario names and rejects missing or unknown values before opening clients or subprocesses.
 
 ## Secrets
 

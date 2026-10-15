@@ -4,10 +4,11 @@ COMPOSE ?= docker compose
 COMPOSE_ENV_FILE ?= .env
 COMPOSE_PROJECT_NAME ?= reliable-batch-ingestion
 COMPOSE_WAIT_TIMEOUT_SECONDS ?= 60
+DEMO_TIMEOUT_SECONDS ?= 210
 SOURCE_SEED ?= 20260901
 export SOURCE_SEED
 
-.PHONY: help doctor policy setup lock format lint test fixtures fixtures-check check-local-env ingest-api ingest-file up down logs seed integration reset reset-destructive verify
+.PHONY: help doctor policy setup lock format lint test fixtures fixtures-check init-local-env check-local-env ingest-api ingest-file ingest-postgres demo-happy-path demo-duplicate demo-api-retry demo-bad-file demo-recovery demo-inspect up down logs seed integration reset reset-destructive verify
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -42,14 +43,38 @@ fixtures: ## Regenerate the committed supplier corpus for SOURCE_SEED
 fixtures-check: ## Compare two regenerations with the committed supplier corpus
 	$(UV) run python scripts/check_fixtures.py --committed fixtures
 
+init-local-env: ## Initialize recognized placeholders in the ignored local environment
+	@$(UV) run python scripts/init_local_env.py "$(COMPOSE_ENV_FILE)"
+
 check-local-env: ## Validate ignored local infrastructure configuration
-	@$(UV) run python scripts/check_local_env.py $(COMPOSE_ENV_FILE)
+	@$(UV) run python scripts/check_local_env.py $(COMPOSE_ENV_FILE) 1>&2
 
 ingest-api: check-local-env ## Run one REST date or inclusive backfill with ARGS="..."
 	@$(UV) run --env-file $(COMPOSE_ENV_FILE) -- python -m batch_ingestion.cli $(ARGS)
 
 ingest-file: check-local-env ## Stage/run or resume one supplier file with ARGS="..."
 	@$(UV) run --env-file $(COMPOSE_ENV_FILE) -- python -m batch_ingestion.files.cli $(ARGS)
+
+ingest-postgres: check-local-env ## Run or resume one bounded PostgreSQL snapshot with ARGS="..."
+	@$(UV) run --env-file $(COMPOSE_ENV_FILE) -- python -m batch_ingestion.postgres_snapshot.cli $(ARGS)
+
+demo-happy-path: check-local-env ## Run the bounded all-source happy-path demo
+	@$(UV) run python scripts/demo.py happy-path --timeout-seconds "$(DEMO_TIMEOUT_SECONDS)" --env-file "$(COMPOSE_ENV_FILE)" --project-name "$(COMPOSE_PROJECT_NAME)"
+
+demo-duplicate: check-local-env ## Run the bounded idempotent-redelivery demo
+	@$(UV) run python scripts/demo.py duplicate --timeout-seconds "$(DEMO_TIMEOUT_SECONDS)" --env-file "$(COMPOSE_ENV_FILE)" --project-name "$(COMPOSE_PROJECT_NAME)"
+
+demo-api-retry: check-local-env ## Run the bounded API rate-limit demo
+	@$(UV) run python scripts/demo.py api-retry --timeout-seconds "$(DEMO_TIMEOUT_SECONDS)" --env-file "$(COMPOSE_ENV_FILE)" --project-name "$(COMPOSE_PROJECT_NAME)"
+
+demo-bad-file: check-local-env ## Run the bounded rejected-file demo
+	@$(UV) run python scripts/demo.py bad-file --timeout-seconds "$(DEMO_TIMEOUT_SECONDS)" --env-file "$(COMPOSE_ENV_FILE)" --project-name "$(COMPOSE_PROJECT_NAME)"
+
+demo-recovery: check-local-env ## Run one allow-listed recovery scenario with SCENARIO=...
+	@$(UV) run python scripts/demo.py recovery --scenario "$(SCENARIO)" --timeout-seconds "$(DEMO_TIMEOUT_SECONDS)" --env-file "$(COMPOSE_ENV_FILE)" --project-name "$(COMPOSE_PROJECT_NAME)"
+
+demo-inspect: check-local-env ## Read and verify recorded demo descriptors
+	@$(UV) run python scripts/demo.py inspect --timeout-seconds "$(DEMO_TIMEOUT_SECONDS)" --env-file "$(COMPOSE_ENV_FILE)" --project-name "$(COMPOSE_PROJECT_NAME)"
 
 up: check-local-env ## Start local services and wait up to the bounded readiness deadline
 	$(COMPOSE) --project-name $(COMPOSE_PROJECT_NAME) --env-file $(COMPOSE_ENV_FILE) up --detach --wait --wait-timeout $(COMPOSE_WAIT_TIMEOUT_SECONDS)
