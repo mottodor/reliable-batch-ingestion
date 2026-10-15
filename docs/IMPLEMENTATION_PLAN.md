@@ -129,13 +129,30 @@ Outcome: snapshot and restart integration tests pass against seeded PostgreSQL.
 
 ## Gate 8 — Recovery and demos (`BI-080`)
 
-- fault injection after payload/before manifest and after individual pages/chunks;
-- documented reconciliation and resume commands;
-- structured run summary;
-- Make targets from the demonstration scenario;
-- at least four failure exercises in the README.
+Detailed execution plan: [`docs/plans/BI-080.md`](plans/BI-080.md).
 
-Outcome: the complete specification scenario is reproducible from a clean clone within a few minutes.
+- demo-only bounded process faults after payload/before manifest, after API pages/PostgreSQL chunks, and during file movement;
+- deterministic 429, permanent 500, malformed body, PostgreSQL disconnect, and unavailable-S3 exercises;
+- normal production reconciliation/resume commands plus exact read-only S3 inventory evidence;
+- structured ingestion and demo summaries;
+- the four Make targets from the demonstration scenario;
+- explicit ignored environment initialization and an isolated clean-export walkthrough;
+- every mandatory failure documented with expected state, recovery action, and honest limitations.
+
+Outcome: the complete specification scenario is reproducible from a clean repository export within bounded time and without hidden local state.
+
+## Post-completion acceptance audit (`BI-090`)
+
+Detailed execution plan: [`docs/plans/BI-090.md`](plans/BI-090.md).
+
+- freeze and classify the exact audited Git/worktree baseline;
+- derive fresh traceability from the in-scope specification, accepted ADRs, and backlog acceptance criteria;
+- adversarially review reliability invariants, module boundaries, failure handling, cleanup, and operator claims;
+- rerun bounded offline, isolated Compose, recovery, clean-export, and verification evidence;
+- publish only actionable prioritized findings with exact evidence, or explicitly record no findings;
+- defer every repair to a separately scoped maintenance task and keep Possible extensions excluded.
+
+Outcome: the completed core has an independent, reproducible acceptance record without mixing audit and implementation work.
 
 ## Common quality gates
 

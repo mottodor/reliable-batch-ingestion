@@ -414,3 +414,128 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Exact root-file inventory, stale-active-path audit, relative Markdown link validation, focused documentation tests (34), LSP diagnostics, `make lint`, `make test` (458 passed; 49 integration tests deselected), `./scripts/doctor.sh`, and `./scripts/verify.sh` — PASS.
 - `make integration` — NOT RUN because this maintenance task changes documentation paths and one path-sensitive unit test only.
 - Next task: implement BI-070 slice 3 restart-safe chunk reconciliation, immutable raw-before-manifest persistence, replay-from-row-one recovery, and focused Garage integration.
+
+## 2026-10-14 — BI-070 slice 3 restart-safe chunk service
+
+- Added failing service tests first, then implemented a narrow shared-storage protocol and one restart-safe `ingest_order_snapshot` operation without adding CLI behavior, dependencies, object keys, manifest fields, or an aggregate checkpoint.
+- The service emits the captured/resume descriptor before S3 mutation, streams one fetched chunk through one context-owned serializer spool, reconciles exact raw/manifest keys, writes and verifies raw Parquet before a succeeded manifest, and closes the spool before the next fetch.
+- Complete chunks retain their original manifest and run ID, payload-only chunks receive only the missing manifest, and absent chunks create raw bytes before metadata; replay always begins at chunk 1 and final count/chunk/watermark checks fail closed.
+- Added stable handled outcomes and failure events for manifest-only/malformed/link/status states, raw conflicts, write failures, source-contract violations, chunk overflow, connection interruption, and total-deadline exhaustion without creating failed manifests or mutable checkpoints.
+- Added focused Garage coverage for a three-chunk snapshot with a pre-existing payload-only middle chunk, exact Parquet bytes/checksums/schema/rows, strict manifest inventory, and a complete replay with zero payload bytes written and unchanged original manifests/run IDs.
+- Focused BI-070 tests (54), LSP diagnostics, `make lint`, `make test` (471 passed; 50 integration tests deselected), focused Garage integration (1), full `make integration` (50 initial integration tests plus recovery checks), and `./scripts/verify.sh` — PASS.
+- BI-070 remains `in_progress`; the synchronized next task is slice 4, adding the strict snapshot CLI and live PostgreSQL interruption/resume coverage.
+
+## 2026-10-14 — BI-070 slice 4 strict CLI and live interruption recovery
+
+- Added failing CLI tests first, then implemented strict `run` and `resume` forms with canonical dates and resume fields, empty/non-empty exclusivity, allow-listed sources, configured-bound validation before client creation, compact NDJSON, stable `0/2/3/4/5` exits, and explicit S3 cleanup.
+- Added `make ingest-postgres`; the adapter delegates connection/transaction/cursor ownership, descriptor capture, serialization, reconciliation, and storage behavior to the existing BI-070 boundaries rather than duplicating them.
+- Added live seeded PostgreSQL/Garage coverage for ordered multi-chunk extraction, exact Arrow schema and rows, succeeded manifests, exact inventory, and complete replay with zero new raw bytes, unchanged checksums, and unchanged original manifests/run IDs.
+- Terminated the active PostgreSQL backend from a second connection after the first committed chunk, verified partial S3 state, inserted a test-owned row above the emitted upper tuple, and proved resume replays from row one while preserving exactly the original bounded 24 rows.
+- Added live payload-only repair, below-bound source-drift rejection with unchanged prior evidence, and a bounded unavailable-S3 CLI failure; tests remove only deterministic snapshot keys and test-owned rows, leaving the default seed restored.
+- Verified Psycopg connection/cursor lifecycle and backend PID behavior against current Context7 `/websites/psycopg_psycopg3` documentation.
+- Focused CLI tests (19), focused live snapshot integration (5), LSP diagnostics, `make lint`, `make test` (490 passed; 54 integration tests deselected), full `make integration` (54 initial integration tests plus recovery checks), and `./scripts/verify.sh` — PASS.
+- BI-070 remains `in_progress`; the synchronized next task is slice 5, documenting the operator contract, running final acceptance, and closing BI-070.
+
+## 2026-10-14 — BI-070 slice 5 documentation and acceptance closeout
+
+- Added a failing documentation contract test first, then added `docs/ingestion/postgres-snapshot.md` with the implemented source/date boundary, exact query columns and Parquet schema, descriptor/identity/key example, read-only repeatable-read watermark behavior, bounds, persistence order, manifests, metrics, errors/exits, recovery matrix, and explicit non-claims.
+- Updated README with only the tested `run`/`resume` commands and expected retained state plus recovery actions for PostgreSQL interruption, unavailable S3, payload-only interruption, source drift, rows above the bound, and idempotent replay.
+- Audited BI-070 acceptance evidence for explicit queries without `SELECT *`/`fetchall()`, one-chunk memory/spool bounds, fixed upper watermark, above-bound exclusion, replay-from-chunk-1 recovery, payload-only repair, exact repeated inventory, cleanup, and honest sequential delivery semantics.
+- Documentation contract tests (27), LSP diagnostics, `make test` (491 passed; 54 integration tests deselected), Compose configuration, `make help`, explicit `make up`, deterministic seed, and full `make integration` (54 initial integration tests plus infrastructure recovery checks) — PASS.
+- The first `make lint` formatting check found one line-wrap change in the new test; it was corrected and the complete lint gate then passed with Ruff and strict mypy.
+- Marked BI-070 done, selected BI-080, synchronized README/backlog/state/plan, and ran `./scripts/verify.sh` successfully before final task-state synchronization.
+- Next task: create the detailed test-first BI-080 plan for recovery demos, final operator documentation, and the clean-clone walkthrough.
+
+## 2026-10-14 — BI-080 recovery demo planning
+
+- Added an implementation-ready four-slice BI-080 plan without changing ingestion, identifier, object-key, manifest, summary, or delivery-semantics contracts.
+- Fixed the four specification Make targets, an allow-listed recovery runner, exact read-only inventory inspection, structured demo evidence, a three-minute warm happy-path budget, and explicit ignored local-environment initialization.
+- Mapped all nine mandatory failures plus deliberate API-page and file-move process boundaries to deterministic intermediate S3 states and normal production recovery commands or honest terminal handling.
+- Kept fault injection in demo-only child processes and wrappers, outside production CLI flags and `AppConfig`; recovery continues to use the existing API, file, PostgreSQL, and shared-storage primitives.
+- Defined isolated clean-export evidence, bounded subprocess/readiness behavior, artifact redaction, test-owned cleanup, protected default volumes, and exact replay checksum/manifest comparisons.
+- Based Compose project/service isolation and bounded readiness planning on current Context7 `/docker/compose` documentation; no dependency or ADR is required.
+- Marked BI-080 `in_progress` and synchronized the backlog, detailed-plan index, state handoff, and next atomic slice.
+- Backlog JSON Schema validation, changed-plan Markdown links, repository policy, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included doctor, locked sync, Ruff, strict mypy, 491 offline tests, and Compose configuration.
+- LSP diagnostics and `make integration` — NOT RUN because only planning/state documentation changed.
+- Next task: start BI-080 slice 1 with failing demo registry, timeout, report, environment-initializer, and Make wiring tests.
+
+## 2026-10-14 — BI-080 slice 1 demo contracts and local environment initializer
+
+- Added the slice-1 tests first and observed collection fail because the planned demo modules did not exist; the completed focused suite passes 16 tests.
+- Added the exact four specification demo targets plus recovery/inspection support targets, explicit timeout/environment/project forwarding, and `make init-local-env`; live demo targets intentionally return a stable `not_implemented` summary until slice 2.
+- Added an eleven-scenario allow-list, path-safe state and artifact contracts, a closed secret-free `demo_summary`, stable exit/error classifications, and compact deterministic JSON without changing `RunSummary`.
+- Added a bounded subprocess supervisor with a separate process session, explicit timeout and cleanup grace, expected/non-expected exit classification, and TERM-then-KILL process-group cleanup.
+- Added explicit local environment initialization that cryptographically replaces only the four recognized placeholders, validates a mode-`0600` temporary file through the existing redacting preflight before atomic publication, refuses unsafe/partial targets, and is byte-idempotent on rerun.
+- Kept imports side-effect free and added no dependency, production CLI fault flag, ingestion implementation, object-key/manifest change, or ADR.
+- Focused slice-1 tests (16), initializer CLI smoke/preflight, Make help, backlog JSON Schema, repository policy, `git diff --check`, LSP diagnostics, `make lint`, and `make test` (507 passed; 54 integration tests deselected) — PASS.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, strict mypy, 507 default tests, and Compose configuration.
+- `make integration` — NOT RUN because slice 1 has no live demo, source, storage, PostgreSQL, or Compose behavior.
+- Next task: implement BI-080 slice 2 recording adapters, exact read-only inventory verification, and the four bounded public demos.
+- Follow-up supervisor coverage exercises TERM-to-KILL escalation and bounded reaping; the final focused count is 17 tests and the default suite is 508 tests.
+- A post-entry verification rerun exposed one Ruff import-order failure after the protocol refinement; the import was corrected before the final successful verification rerun.
+
+## 2026-10-14 — BI-080 slice 2 public demos and exact inspection
+
+- Added failing fake-S3 inventory and recording-adapter tests first, observed the expected missing-module/import failures, then implemented the public demo execution without adding a second ingestion implementation, production fault flags, dependencies, object-key changes, or manifest changes.
+- The happy path supervises the existing REST, file, and PostgreSQL CLIs; duplicate replay requires zero canonical raw writes plus unchanged exact key/length/SHA-256/manifest-byte evidence for API, snapshot, same-name file, and renamed-content runs.
+- Added a private bounded API-retry child that resets one allow-listed mock fault key and invokes the production ingestion primitive with `rate_limit_once`, proving one 429, the exact one-second `Retry-After`, one retry, no stored 429 body, and a succeeded page pair.
+- The bad-file demo copies committed schema-invalid bytes to a canonical filename, creates one bounded malformed UTF-8 CSV, requires exact raw/rejected retention and stable reasons, then delivers corrected valid bytes without deleting rejected evidence.
+- Added project-scoped mode-0600 state/report artifacts, strict record schemas, compact NDJSON relay/state/summary evidence, bounded process-group supervision, and stable failure codes without recording credentials, payload values, absolute paths, command arguments, or backend exception text.
+- Exact inspection lists only calculated prefixes with bounded pagination, requires exact key sets, streams and independently hashes object bytes while ignoring `ETag`, strictly validates manifests and file dispositions, and checks snapshot Parquet schema, row order/count, and upper tuple.
+- Added an isolated live test bucket and project that run all four Make targets plus `demo-inspect`, verify expected counts/retry/rejections and output redaction, and remove only test-owned objects, bucket, and artifacts.
+- The first `make lint` format check found one changed Python file requiring Ruff formatting; formatting was applied and the complete lint gate then passed.
+- Focused demo tests (21), LSP diagnostics, repository policy, `git diff --check`, Compose configuration, `make lint`, `make test` (512 passed; 55 integration tests deselected), all four public demos, `demo-inspect`, focused live demo integration, full `make integration` (55 initial integration tests plus infrastructure recovery), and `./scripts/verify.sh` — PASS.
+- Observed warm happy-path runtime was 2.29 seconds on the validation workstation, below the three-minute acceptance budget; setup/image download time was excluded.
+- Verified Boto3 prefix pagination and streamed object-body behavior against current Context7 `/boto/boto3` documentation; SHA-256 remains calculated from actual bytes rather than `ETag`.
+- BI-080 remains `in_progress`; next task: implement slice 3 demo-only process failpoints and the complete mandatory recovery scenario matrix using normal production recovery commands.
+
+## 2026-10-14 — BI-080 slice 3 deliberate failure boundaries and recovery matrix
+
+- Added unit tests for one-shot demo-only manifest and delete failpoints, including the required verified-raw, complete-page, selected-key, copied-destination, and destination-read prerequisites; unrelated writes/deletes do not trigger them.
+- Added a private worker with no production CLI or `AppConfig` fault flag. It exercises permanent 500 and malformed HTTP 200 through the existing API service seam, terminates after a complete API page or before its manifest, terminates a PostgreSQL backend from a second connection after chunk 1, and dies immediately before landing deletion after verified file copy.
+- Implemented all eleven `demo-recovery` scenarios. The parent requires the expected child exit and exact intermediate S3 state, then delegates recovery to the normal API CLI, file `resume`, or PostgreSQL `resume`; malformed JSON is safely re-surfaced unchanged instead of overwritten.
+- Added a bounded unreachable-loopback S3 exercise without stopping Garage or selecting unrelated data. Explicit loopback proxy bypass makes the handled exit deterministic even when the host exports HTTP proxy variables.
+- Added safe replay behavior for completed API-page, payload-before-manifest, file-move, and PostgreSQL-drop demonstrations: reruns verify the already recovered state and use normal idempotent commands instead of deleting evidence to recreate a crash.
+- Added isolated parameterized live coverage for every mandatory failure plus API-page and file-move process boundaries, exact intermediate/final state events, normal recovery, output credential/payload redaction, and test-owned bucket/artifact cleanup.
+- Verified Psycopg `ConnectionInfo.backend_pid` against current Context7 `/websites/psycopg_psycopg3` documentation; no dependency, ADR, manifest, key, or production delivery-semantics change was required.
+- Focused demo unit tests (24), LSP diagnostics, `make lint`, and `make test` (515 passed; 66 integration tests deselected) — PASS.
+- The first full integration run exposed nondeterministic proxy handling for `127.0.0.1:1`; after explicit `NO_PROXY`/`no_proxy` isolation, the eleven-scenario focused run and full `make integration` (66 initial integration tests plus infrastructure recovery checks) passed.
+- After adding live repeat-execution assertions for all four abrupt process boundaries, one `make lint` formatting check failed; Ruff formatting was applied, then final lint and full integration reruns passed.
+- BI-080 remains `in_progress`; next task: implement slice 4 final recovery/operator documentation and the isolated clean-export acceptance walkthrough.
+
+## 2026-10-15 — BI-080 slice 4 clean-export and documentation closeout
+
+- Added failing clean-export and documentation contract tests first, then implemented `scripts/check_clean_export.py` with a Git-reported tracked/unignored export boundary, unsafe/local-state rejection, regular-file-only copying, explicit owner-only environment initialization, and an exact allow-list for isolated loopback ports, endpoints, and bucket values.
+- The harness applies per-command and total deadlines to locked setup, doctor, Compose rendering, startup, deterministic seed, all four public demos, offline tests, and final exact inspection; it verifies one passing summary from each demo and the expected clean-project object counts.
+- Cleanup runs normal `make down`, invokes the existing reset helper with exact destructive confirmation only for the generated project, requires all project-labeled containers/networks/volumes to be absent, and compares protected default-project volume fingerprints before and after.
+- Added `docs/ingestion/recovery-demos.md` with all eleven allow-listed scenarios. Every row documents the exact trigger command and underlying exit, intermediate object state, normal recovery or terminal action, final state, and relevant limitations; README now exposes only implemented demo, recovery, inspection, and clean-export commands.
+- The first clean-export run correctly exposed a configuration-dependent final inventory mismatch (one default snapshot chunk rather than the integration test's three); the assertion was corrected from eight to six raw/manifest pairs without changing the configured chunk bound. The second run correctly found retained bad-file input payloads under artifacts; report scanning was narrowed to NDJSON/state artifacts while keeping intentional rejected input bytes as business evidence. The third complete walkthrough passed.
+- Accepted clean-export timing on the validation workstation was 11.11 seconds for setup, 2.59 seconds for the warm happy path, and 27.40 seconds through final inspection; cleanup also passed and no hardware-independent total-time promise was added.
+- Current Compose project isolation, health waiting, and named-volume cleanup semantics were checked against Context7 `/docker/compose`; no dependency, ADR, manifest, object-key, or production fault-interface change was needed.
+- Focused contracts (6), LSP diagnostics, `make lint`, `make test` (521 passed; 66 integration tests deselected), Compose rendering, isolated clean-export acceptance, full `make integration` (66 tests plus marker and infrastructure recovery checks), repository policy, and `./scripts/verify.sh` — PASS.
+- Marked BI-080 done, selected bounded read-only BI-090 instead of adding Possible extensions, and synchronized README, backlog, state, detailed plan, and this worklog.
+- Next task: perform BI-090 as one independent post-completion acceptance audit of the completed core against the specification, accepted ADRs, and recorded evidence.
+
+## 2026-10-15 — BI-090 independent acceptance-audit planning
+
+- Added an implementation-ready four-slice BI-090 plan without executing the audit or changing product code, tests, dependencies, contracts, README behavior, or accepted ADRs.
+- Fixed an independence boundary that rebuilds traceability from the specification, ADRs, backlog criteria, implementation, tests, documentation, and fresh command evidence rather than accepting prior state/worklog claims as proof.
+- Required exact Git/worktree provenance and an explicit distinction between a clean committed checkout and a dirty working-tree export; the audit may not commit, stash, reset, clean, or silently repair the reviewed tree.
+- Defined a stable audit-report structure, severity/category taxonomy, per-finding evidence schema, full requirement matrix, adversarial static checks, isolated live validation, protected-resource comparison, and bounded cleanup.
+- Kept the audit read-only for product artifacts: actionable repairs must become separately scoped maintenance tasks before implementation, and Possible extensions remain excluded.
+- Marked BI-090 `in_progress` at the planning boundary and synchronized the backlog, implementation-plan index, state handoff, and next audit slice.
+- `./scripts/doctor.sh`, backlog JSON Schema validation, changed-plan Markdown links, repository policy, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked dependency sync, Ruff, strict mypy, 521 offline tests, and Compose rendering.
+- LSP diagnostics and `make integration` — NOT RUN because this change is planning/state documentation only.
+- Next task: execute BI-090 slice 1 by freezing and classifying the exact audited baseline and building the authoritative requirement traceability matrix.
+
+## 2026-10-15 — BI-090 slice 1 baseline and requirement traceability
+
+- Froze the audit baseline before service startup or audit-owned edits: `HEAD` `a1ef506fd13545467c6caf6c04eb803ab2c77461` on `main`, full short status, tool versions, and a byte-hashed inventory of all 158 tracked/unignored paths.
+- Classified the baseline as `dirty_worktree`; 9 tracked paths differed from `HEAD` and 19 implementation, test, script, plan, or operator-document paths were untracked.
+- Added `docs/audits/BI-090.md` with the required fixed sections, exact baseline provenance, divergence hashes, core-scope boundary, and an authority-derived traceability inventory.
+- Enumerated every in-scope specification requirement, accepted ADR obligation, and completed BI-000–BI-080 acceptance criterion with candidate implementation, tests, and documentation; every fresh-evidence cell remains explicitly `UNVERIFIED` pending slices 2–4.
+- Recorded BI-090-F01: the frozen `HEAD` cannot reproduce completed snapshot/demo/clean-export behavior because required files existed only in the dirty export. This blocks a clean-commit claim for that baseline but not continuation of the bounded dirty-worktree audit.
+- Changed no product code, tests, dependencies, contracts, README behavior, or accepted ADR as part of the audit slice; ignored provenance evidence remains under `artifacts/audit/BI-090-slice1/`.
+- `./scripts/doctor.sh`, exact inventory capture, repository policy, backlog JSON Schema validation, `git diff --check`, report structure/population, LSP diagnostics, `make lint`, `make test` (521 passed; 66 integration tests deselected), Compose rendering, and `./scripts/verify.sh` — PASS.
+- Retained two failed ad hoc backlog-validator attempts: uv lacked PyYAML/JSON Schema and Ruby was unavailable; validation then passed through the already available system-Python YAML/JSON Schema libraries. Isolated live integration and clean-export evidence were deliberately not inferred from earlier sessions.
+- Next task: execute BI-090 slice 2 adversarial static review and convert mapped source/document observations into evidence-backed candidate findings without implementing repairs.

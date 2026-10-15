@@ -1,14 +1,14 @@
 # Project state
 
-Updated: 2026-10-14
+Updated: 2026-10-15
 
 ## Current stage
 
-The deterministic core contracts, BI-020 local Compose infrastructure, BI-030 shared S3 boundary, BI-040 deterministic source generators and fixtures, BI-050 REST API ingestion/backfill, and BI-060 file ingestion are implemented, documented, and acceptance-tested. Documentation is organized by specification, shared contracts, and source-specific ingestion responsibilities. BI-070 bounded PostgreSQL snapshot implementation is active; slices 1–2 contracts, bounded reader, and one-chunk serializer are complete.
+The complete core lab through BI-080 is implemented, documented, and acceptance-tested. It includes deterministic contracts and sources, pinned local infrastructure, the shared S3 boundary, REST/backfill, whole-file ingestion, bounded PostgreSQL snapshots, all public demos, exact read-only inspection, all mandatory recovery scenarios, and an isolated clean-export walkthrough. BI-090 is in progress: slice 1 froze an exact dirty-worktree baseline, recorded its clean-commit reproducibility gap, and built the authority-derived requirement traceability inventory. Static and runtime evidence remains unverified. The audit adds no product scope or Possible extensions.
 
 ```yaml
-active_task_id: BI-070
-last_completed_task_id: BI-007
+active_task_id: BI-090
+last_completed_task_id: BI-080
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -86,12 +86,45 @@ last_completed_task_id: BI-007
 - positive PostgreSQL connect/statement timeout and snapshot elapsed/chunk/count/byte/spool settings are explicit and cross-validated, while typed snapshot events, handled error codes, and metric adapters expose no DSN, SQL, row values, or exception text;
 - BI-070 slice 2 opens one bounded PostgreSQL connection without hidden retries, applies read-only `REPEATABLE READ` characteristics before the explicit transaction, sets transaction-local statement timeout, captures or validates the daily upper descriptor, and extracts the seven explicit columns through one named cursor using only `fetchmany(chunk_rows)`;
 - reader validation enforces exact row types, strict `(updated_at, order_id)` ordering, daily and inclusive-upper bounds, final count/watermark equality, monotonic deadlines, and cursor/transaction/connection cleanup without mutable checkpoint advancement;
-- deterministic one-chunk serialization writes the exact Arrow schema as one uncompressed Parquet row group (including the zero-row chunk), applies fixed writer options, enforces row/serialized-byte/spool bounds, streams SHA-256, rewinds output, and closes in-memory or disk-spilled spools on every exit.
+- deterministic one-chunk serialization writes the exact Arrow schema as one uncompressed Parquet row group (including the zero-row chunk), applies fixed writer options, enforces row/serialized-byte/spool bounds, streams SHA-256, rewinds output, and closes in-memory or disk-spilled spools on every exit;
+- BI-070 slice 3 adds one restart-safe service that validates/emits the descriptor before mutation, processes one reader chunk and spool at a time, reconciles exact deterministic keys, and commits verified raw Parquet before one succeeded manifest;
+- absent, payload-only, complete, complete replay, manifest-only, malformed/link/status manifest, raw conflict, write failure, source-contract, overflow, deadline, and post-first-chunk connection failures have stable tested outcomes without checkpoints or failed manifests;
+- replay starts from chunk 1, preserves complete manifests and original run IDs, repairs only payload-only manifests, reports exact counters/events, and closes each spool before the next fetch;
+- focused Garage integration proves a three-chunk payload-only recovery and complete replay with exact Parquet bytes, checksums, Arrow schemas, rows, manifest inventory, zero replay payload bytes, and unchanged manifests;
+- BI-070 slice 4 adds strict `run` and `resume` CLI forms, canonical empty/non-empty descriptor reconstruction, pre-client argument and configured-bound checks, compact NDJSON, stable `0/2/3/4/5` exits, explicit S3 cleanup, and `make ingest-postgres`;
+- live seeded PostgreSQL extraction verifies ordered multi-chunk Parquet rows, exact schemas/manifests/inventory, and a complete replay with unchanged checksums, manifests, and original run IDs;
+- live backend termination after one complete chunk proves replay-from-start recovery, preservation of prior evidence, and exclusion of a later row above the captured upper tuple;
+- live payload-only repair, below-bound source-drift rejection, and bounded unavailable-S3 behavior retain inspectable evidence and return stable handled outcomes;
+- `docs/ingestion/postgres-snapshot.md` and README document source/date semantics, exact columns and Parquet schema, descriptor identity and key examples, transaction/watermark behavior, all bounds and metrics, chunk manifests, CLI forms/exits, and tested recovery actions;
+- the complete BI-070 offline and local Compose acceptance matrix passes, so BI-070 is done and BI-080 is active;
+- BI-080 has an implementation-ready four-slice plan covering explicit local environment initialization, the four specification demo targets, exact inventory inspection, demo-only process failpoints, all mandatory failures, normal-command recovery, structured evidence, and an isolated clean-export walkthrough;
+- BI-080 slice 1 adds the exact public/supporting Make surface, an eleven-scenario allow-list, path-safe state/report contracts, deterministic compact `demo_summary` serialization, and a bounded process-group supervisor that classifies expected failures and terminates/reaps timed-out children;
+- explicit local environment initialization now creates or updates only recognized placeholders with cryptographic values, preflights a mode-`0600` temporary file before atomic publication, refuses tracked/symlink/partial/unknown-placeholder targets, never prints generated values, and leaves initialized content byte-stable on rerun;
+- BI-080 slice 2 replaces the public skeleton with bounded adapters over the existing API, file, and PostgreSQL CLIs; the one-time 429 demo uses a private child over the existing API service seam and adds no production fault flag;
+- `demo-happy-path` creates or safely replays REST, archived supplier CSV, and bounded snapshot evidence; its measured warm ingestion path remains below the three-minute acceptance budget;
+- `demo-duplicate` proves zero canonical raw writes and unchanged key/length/checksum/manifest-byte inventory across API/snapshot replay, same-name file redelivery, and renamed identical content;
+- `demo-api-retry` resets one isolated fault key, proves one 429 with the exact valid `Retry-After` delay and one retry, and retains no 429 body; `demo-bad-file` retains exact schema-invalid and malformed UTF-8 bytes under raw/rejected keys before corrected delivery;
+- project-scoped state records contain only strict non-secret descriptors, while NDJSON reports relay production events, add exact state assertions, and finish with one closed `demo_summary`;
+- read-only inspection paginates only calculated prefixes, requires exact key sets and strict manifest linkage/status, streams bytes for independent SHA-256 without using `ETag`, checks absent landing/forbidden dispositions, and validates snapshot Parquet schema, rows, order, count, and upper tuple;
+- focused live validation uses a unique test-owned bucket and artifact project, executes all four Make targets plus `demo-inspect`, scans output for credentials/payload values, and removes only isolated resources;
+- BI-080 slice 3 adds private one-shot storage/client failpoints that terminate only after verified raw persistence, after a complete API page pair, or after verified file copy and immediately before landing deletion; production CLIs and `AppConfig` expose no fault selector;
+- the private PostgreSQL worker captures the reader backend PID, terminates it from a second bounded connection after chunk 1 is complete, and records the canonical resume descriptor without introducing a checkpoint;
+- `demo-recovery` now executes all eleven allow-listed rows: 429, permanent 500, malformed JSON, API-page death, both file redelivery classes, schema rejection, file-move death, PostgreSQL disconnect, isolated unreachable S3, and payload-before-manifest death;
+- the parent requires expected crash/handled exits plus exact intermediate state before invoking normal API, file `resume`, or snapshot `resume`; malformed JSON instead re-surfaces unchanged terminal evidence, and completed process scenarios replay safely without recreating a fault;
+- isolated live parameterized coverage proves every recovery scenario, final exact inventory, bounded subprocesses, secret/payload-value redaction, and test-owned bucket cleanup;
+- BI-080 slice 4 adds a bounded clean-export harness that copies only Git-reported tracked/unignored regular files, rejects local/generated state and unsafe paths, creates an isolated owner-only environment, and executes locked setup, doctor, Compose rendering, seed, all four demos, offline tests, and final exact inspection;
+- clean-export cleanup uses exact destructive confirmation only for its unique project, requires its labeled containers/networks/volumes to be absent, and proves protected default-project volume fingerprints are unchanged;
+- `docs/ingestion/recovery-demos.md` and README document every allow-listed failure with exact trigger/exit, intermediate state, normal recovery or terminal action, final state, artifacts, timing boundary, cleanup, and honest limitations;
+- the accepted clean-export walkthrough measured 11.11 seconds of setup, a 2.59-second warm happy path, and 27.40 seconds through final inspection on the validation workstation;
+- the complete BI-080 unit, integration, clean-export, repository-policy, and verification acceptance matrix passes, so BI-080 is done and the core product scope is complete;
+- BI-090 has an implementation-ready four-slice audit plan fixing the independence boundary, exact baseline provenance, full requirement traceability, adversarial static review, isolated fresh validation, finding schema, and separate maintenance-task handoff;
+- BI-090 slice 1 recorded the exact `dirty_worktree` baseline at `HEAD` `a1ef506fd13545467c6caf6c04eb803ab2c77461`, a 158-path byte inventory, tool versions, full status, and all paths/hashes that diverged from the commit;
+- the audit report maps every in-scope specification requirement, accepted-ADR obligation, and completed BI-000–BI-080 acceptance criterion to candidate implementation, tests, and documentation with explicit `UNVERIFIED` evidence status;
+- BI-090-F01 records that the frozen `HEAD` lacks completed snapshot/demo/clean-export files present only in the dirty export, so that baseline cannot be described as a clean committed checkout.
 
 ## Not completed
 
-- bounded PostgreSQL snapshot ingestion;
-- complete ingestion demo commands.
+- BI-090 slices 2–4: adversarial static review, isolated fresh validation, final evidence statuses/findings, and closeout; no core implementation or Possible extension is active.
 
 ## Known limitations and risks
 
@@ -102,15 +135,13 @@ last_completed_task_id: BI-007
 
 ## Latest validation
 
-2026-10-14, BI-007 documentation information architecture:
+2026-10-15, BI-090 slice 1 baseline and traceability:
 
-- exact `docs/` root-file inventory and stale-active-path audit — PASS;
-- relative Markdown link-target validation — PASS;
-- focused documentation contract tests — PASS, 34 tests;
-- LSP diagnostics for the changed Python test, `make lint`, and `make test` — PASS, including 458 offline tests with 49 integration tests deselected;
-- `./scripts/doctor.sh` and `./scripts/verify.sh` — PASS;
-- `make integration` — NOT RUN because this maintenance task changes documentation paths and one path-sensitive unit test only.
+- `./scripts/doctor.sh`, exact baseline/inventory capture, repository policy, backlog JSON Schema validation, `git diff --check`, and audit report structure/population — PASS;
+- active LSP diagnostics across all 17 changed/untracked Python paths, `make lint`, `make test` (521 passed; 66 integration tests deselected), Compose rendering, and `./scripts/verify.sh` — PASS;
+- two initial ad hoc backlog-validation commands failed because uv lacked PyYAML/JSON Schema and Ruby was unavailable; the available system-Python YAML/JSON Schema path then passed, and the audit report retains both failed attempts;
+- isolated clean-export and `make integration` — NOT RUN in slice 1; requirement rows remain `UNVERIFIED` rather than inheriting PASS from broad gates or earlier claims.
 
 ## Next atomic step
 
-Implement BI-070 slice 3: the restart-safe chunk service over the shared storage boundary.
+Execute BI-090 slice 2: adversarially inspect every mapped implementation, test, documentation, reliability, and cleanup path and record evidence-backed candidate findings without changing product files.

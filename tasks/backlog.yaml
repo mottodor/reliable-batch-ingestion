@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-070
+active_task_id: BI-090
 
 status_values:
   - todo
@@ -187,7 +187,7 @@ tasks:
 
   - id: BI-070
     title: PostgreSQL bounded snapshot ingestion
-    status: in_progress
+    status: done
     depends_on: [BI-030, BI-040]
     scope:
       - Define deterministic daily descriptors, chunk identity/keys, strict order schema, bounded configuration, and secret-free observability contracts.
@@ -203,16 +203,34 @@ tasks:
 
   - id: BI-080
     title: Recovery demos and final documentation
-    status: todo
+    status: done
     depends_on: [BI-050, BI-060, BI-070]
     scope:
-      - Add explicit fault injection at required recovery boundaries.
-      - Add structured run summaries and demo Make targets.
-      - Document at least four failure exercises and recovery commands.
-      - Complete integration suite and clean-clone walkthrough.
+      - Add bounded demo-only fault injection at API page, file movement, PostgreSQL chunk/connection, S3 endpoint, and payload-before-manifest boundaries without adding production CLI fault flags.
+      - Implement the four specification Make targets, an allow-listed recovery runner, read-only exact inventory inspection, and structured demo summaries over the existing ingestion primitives.
+      - Document every mandatory failure with its trigger, expected retained state, normal recovery command or terminal action, final state, and honest delivery limitations.
+      - Add explicit ignored local-environment initialization and an isolated clean-export walkthrough with bounded setup, execution, inspection, and cleanup.
+      - Keep scenario, report, object-state, artifact-path, and supervised-subprocess contracts allow-listed, secret-free, path-safe, and side-effect-free at import time.
     acceptance:
-      - Demonstration commands from docs/specification/batch-ingestion.md are implemented.
-      - Happy path completes in a few minutes on a local workstation.
-      - All mandatory failure scenarios have expected state and recovery command.
-      - Unit and integration suites pass.
-      - README matches actual commands and limitations.
+      - make demo-happy-path, demo-duplicate, demo-api-retry, and demo-bad-file exist, are bounded, emit structured evidence, and pass from an isolated clean export.
+      - The warm happy path ingests REST, file, and PostgreSQL sources within three minutes and leaves exact raw payloads, manifests, archived/rejected files, and snapshot chunks available for inspection.
+      - Repeated API, snapshot, same-name file, and renamed-content runs preserve canonical key/checksum/manifest inventory and write no new canonical raw bytes.
+      - All nine mandatory failures plus API-page and file-move process boundaries have deterministic intermediate-state assertions and use the normal ingestion commands for recovery or safe terminal re-surfacing.
+      - Demo reports contain no secrets or payload values, every wait/subprocess/retry is bounded, and isolated cleanup cannot select default-project data.
+      - Local environment initialization is explicit, atomic, owner-only, placeholder-limited, idempotent, redacting, and validated before publication.
+      - Unit, integration, clean-export, repository-policy, and verification suites pass, and README matches only commands, timings, recovery semantics, and limitations actually validated.
+
+  - id: BI-090
+    title: Independent post-completion acceptance audit
+    status: in_progress
+    depends_on: [BI-080]
+    scope:
+      - Freeze the exact audited baseline and independently trace every in-scope specification, accepted ADR, and completed-task acceptance requirement through implementation, tests, documentation, and fresh evidence.
+      - Re-run bounded offline, isolated Compose, recovery, and clean-export acceptance checks without treating prior plans, state, or worklog claims as proof.
+      - Record only actionable correctness, reproducibility, documentation, or safety findings; do not fix findings, start Possible extensions, or add product scope during the audit.
+    acceptance:
+      - The audit report distinguishes a clean committed checkout from a dirty working-tree export and records revision, source inventory, tool versions, commands, outcomes, and cleanup evidence.
+      - Every in-scope requirement has exact traceability to implementation, tests, documentation, and fresh PASS, FAIL, BLOCKED, or NOT RUN evidence.
+      - The audit records prioritized findings with exact authority and evidence, or explicitly records that no findings were identified.
+      - Any required follow-up is decomposed into a separate bounded maintenance task before implementation; completed product tasks are not reopened implicitly.
+      - Audit execution changes no product code, tests, dependencies, contracts, or ADRs, and the backlog/state handoff remains synchronized.
