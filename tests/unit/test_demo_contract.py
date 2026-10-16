@@ -9,6 +9,7 @@ import os
 import stat
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -43,6 +44,13 @@ from scripts.demo_inventory import (
 )
 from scripts.init_local_env import InitializationError, initialize_local_environment
 
+from batch_ingestion.api.logical_manifest import (
+    API_LOGICAL_RUN_MANIFEST_STATUS,
+    API_LOGICAL_RUN_MANIFEST_TYPE,
+    ApiLogicalRunManifest,
+    ApiLogicalRunPage,
+    api_logical_run_manifest_key,
+)
 from batch_ingestion.identifiers import (
     BatchIdentity,
     SourceType,
@@ -560,7 +568,37 @@ def _api_record_and_objects() -> tuple[DemoBatchRecord, dict[str, bytes]]:
         payload_keys=(raw_key,),
         expected_status=ManifestStatus.SUCCEEDED,
     )
-    return record, {raw_key: payload, manifest_key: manifest.to_json().encode()}
+    manifest_bytes = manifest.to_json().encode()
+    aggregate = ApiLogicalRunManifest(
+        manifest_type=API_LOGICAL_RUN_MANIFEST_TYPE,
+        schema_version=1,
+        source_name=identity.source_name,
+        source_type=identity.source_type,
+        source_date=identity.source_date,
+        batch_id=batch_id,
+        identity_parameters=dict(identity.parameters),
+        completion_run_id="run_80808080808080808080808080808080",
+        completed_at=datetime(2026, 9, 1, 12, 1, tzinfo=UTC),
+        status=API_LOGICAL_RUN_MANIFEST_STATUS,
+        page_count=1,
+        record_count=1,
+        pages=(
+            ApiLogicalRunPage(
+                page_number=1,
+                object_key=raw_key,
+                page_manifest_key=manifest_key,
+                payload_content_length=len(payload),
+                payload_checksum_sha256=sha256(payload).hexdigest(),
+                page_manifest_checksum_sha256=sha256(manifest_bytes).hexdigest(),
+                record_count=1,
+            ),
+        ),
+    )
+    return record, {
+        raw_key: payload,
+        manifest_key: manifest_bytes,
+        api_logical_run_manifest_key(identity): aggregate.to_bytes(),
+    }
 
 
 def test_production_adapter_delegates_to_all_three_existing_cli_paths(tmp_path: Path) -> None:
@@ -617,11 +655,40 @@ def test_inventory_verifier_streams_exact_payload_and_ignores_etag() -> None:
     ).verify((record,))
 
     assert set(evidence.objects) == set(objects)
+    assert evidence.raw_count == 1
+    assert evidence.manifest_count == 2
     assert (
         evidence.objects[record.payload_keys[0]].checksum_sha256
         == sha256(objects[record.payload_keys[0]]).hexdigest()
     )
     assert all(body.closed_by_client for body in client.bodies)
+
+
+def test_inventory_verifier_requires_and_validates_api_logical_run_manifest() -> None:
+    record, objects = _api_record_and_objects()
+    aggregate_key = next(key for key in objects if key.endswith("logical-run.manifest.json"))
+
+    missing = dict(objects)
+    del missing[aggregate_key]
+    with pytest.raises(DemoInventoryError, match="exact inventory"):
+        DemoInventoryVerifier(
+            client=_InventoryClient(missing),
+            bucket="demo-bucket",
+            maximum_object_bytes=1_000_000,
+        ).verify((record,))
+
+    aggregate = ApiLogicalRunManifest.from_bytes(objects[aggregate_key])
+    conflicting_page = replace(
+        aggregate.pages[0],
+        page_manifest_checksum_sha256="f" * 64,
+    )
+    conflicting = replace(aggregate, pages=(conflicting_page,)).to_bytes()
+    with pytest.raises(DemoInventoryError, match="logical-run manifest evidence mismatch"):
+        DemoInventoryVerifier(
+            client=_InventoryClient({**objects, aggregate_key: conflicting}),
+            bucket="demo-bucket",
+            maximum_object_bytes=1_000_000,
+        ).verify((record,))
 
 
 def test_inventory_verifier_rejects_unexpected_key_and_manifest_byte_change() -> None:
@@ -644,7 +711,22 @@ def test_inventory_verifier_rejects_unexpected_key_and_manifest_byte_change() ->
     before = verifier.verify((record,))
     changed = dict(objects)
     manifest_key = manifest_key_for(record.payload_keys[0])
-    changed[manifest_key] = changed[manifest_key] + b"\n"
+    page_manifest = Manifest.from_json(changed[manifest_key].decode())
+    changed[manifest_key] = (
+        replace(
+            page_manifest,
+            run_id="run_81818181818181818181818181818181",
+        )
+        .to_json()
+        .encode()
+    )
+    aggregate_key = next(key for key in changed if key.endswith("logical-run.manifest.json"))
+    aggregate = ApiLogicalRunManifest.from_bytes(changed[aggregate_key])
+    changed_page = replace(
+        aggregate.pages[0],
+        page_manifest_checksum_sha256=sha256(changed[manifest_key]).hexdigest(),
+    )
+    changed[aggregate_key] = replace(aggregate, pages=(changed_page,)).to_bytes()
     after = DemoInventoryVerifier(
         client=_InventoryClient(changed),
         bucket="demo-bucket",

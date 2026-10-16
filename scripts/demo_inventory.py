@@ -16,6 +16,10 @@ from typing import Protocol, cast
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from batch_ingestion.api.logical_manifest import (
+    API_LOGICAL_RUN_MANIFEST_MAX_BYTES,
+    ApiLogicalRunManifest,
+)
 from batch_ingestion.identifiers import SourceType, manifest_key_for
 from batch_ingestion.manifests import Manifest, ManifestStatus
 from batch_ingestion.postgres_snapshot.schema import ORDERS_ARROW_SCHEMA
@@ -318,6 +322,13 @@ class DemoInventoryVerifier:
             expected_manifests = set(record.manifest_keys)
             raw_prefix = record.payload_keys[0].rsplit("/", 1)[0] + "/"
             manifest_prefix = record.manifest_keys[0].rsplit("/", 1)[0] + "/"
+            aggregate_key = manifest_prefix + "logical-run.manifest.json"
+            requires_aggregate = (
+                record.source_type is SourceType.API
+                and record.expected_status is ManifestStatus.SUCCEEDED
+            )
+            if requires_aggregate:
+                expected_manifests.add(aggregate_key)
             self._require_exact_prefix(raw_prefix, expected_payloads)
             self._require_exact_prefix(manifest_prefix, expected_manifests)
 
@@ -369,6 +380,40 @@ class DemoInventoryVerifier:
 
             if snapshot_evidence is not None:
                 self._require_snapshot_complete(record, snapshot_evidence)
+
+            if requires_aggregate:
+                aggregate_bytes, aggregate_evidence = self._read_object(
+                    aggregate_key,
+                    maximum_bytes=API_LOGICAL_RUN_MANIFEST_MAX_BYTES,
+                )
+                try:
+                    aggregate = ApiLogicalRunManifest.from_bytes(aggregate_bytes)
+                except (TypeError, ValueError) as error:
+                    raise DemoInventoryError(
+                        f"logical-run manifest is invalid for key {aggregate_key}"
+                    ) from error
+                if (
+                    aggregate.source_name != record.source_name
+                    or aggregate.source_type is not record.source_type
+                    or aggregate.source_date.isoformat() != record.source_date
+                    or aggregate.batch_id != record.batch_id
+                    or aggregate.page_count != len(record.payload_keys)
+                    or tuple(page.object_key for page in aggregate.pages) != record.payload_keys
+                    or tuple(page.page_manifest_key for page in aggregate.pages)
+                    != record.manifest_keys
+                    or any(
+                        page.payload_content_length != evidence[page.object_key].content_length
+                        or page.payload_checksum_sha256 != evidence[page.object_key].checksum_sha256
+                        or page.page_manifest_checksum_sha256
+                        != evidence[page.page_manifest_key].checksum_sha256
+                        for page in aggregate.pages
+                    )
+                ):
+                    raise DemoInventoryError(
+                        f"logical-run manifest evidence mismatch for key {aggregate_key}"
+                    )
+                evidence[aggregate_key] = aggregate_evidence
+                manifest_keys.add(aggregate_key)
 
             if record.disposition_key is not None:
                 disposition, disposition_evidence = self._read_object(

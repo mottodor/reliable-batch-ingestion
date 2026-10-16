@@ -8,7 +8,8 @@ import json
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import BinaryIO, Protocol
@@ -25,15 +26,17 @@ from batch_ingestion.identifiers import (
 )
 from batch_ingestion.manifests import MANIFEST_SCHEMA_VERSION, Manifest, ManifestStatus
 from batch_ingestion.storage import (
+    DownloadedObject,
     ImmutableWriteResult,
     ImmutableWriteStatus,
     ObjectConflictError,
     ObjectVerificationError,
     ReconciliationResult,
     ReconciliationState,
+    StorageBackendError,
     StorageError,
 )
-from batch_ingestion.summary import RunSummary
+from batch_ingestion.summary import RunSummary, TerminalEmitter
 
 from .fetcher import (
     HttpPageFetchError,
@@ -43,6 +46,15 @@ from .fetcher import (
     ResponseSizeLimitError,
     RetryEvent,
     fetch_page,
+)
+from .logical_run import (
+    LogicalRunReconciliation,
+    LogicalRunReconciliationState,
+    PageEvidenceObservation,
+    inspect_logical_run,
+    observe_page_evidence,
+    publish_logical_run,
+    reconcile_page_evidence,
 )
 from .retry import RetryBudgetExhausted, RetryClassification
 from .sources import (
@@ -69,6 +81,10 @@ class ApiErrorCode(StrEnum):
     STORAGE_CONFLICT = "storage_conflict"
     STORAGE_CORRUPTION = "storage_corruption"
     STORAGE_ERROR = "storage_error"
+    LOGICAL_RUN_MANIFEST_CORRUPT = "logical_run_manifest_corrupt"
+    LOGICAL_RUN_MANIFEST_CONFLICT = "logical_run_manifest_conflict"
+    LOGICAL_RUN_MANIFEST_ORPHANED = "logical_run_manifest_orphaned"
+    LOGICAL_RUN_MANIFEST_WRITE_UNCERTAIN = "logical_run_manifest_write_uncertain"
 
 
 class ApiRunStatus(StrEnum):
@@ -92,6 +108,18 @@ _FAILURE_MESSAGES: dict[ApiErrorCode, str] = {
     ApiErrorCode.STORAGE_CONFLICT: "stored object conflicts with deterministic page evidence",
     ApiErrorCode.STORAGE_CORRUPTION: "stored page evidence failed verification",
     ApiErrorCode.STORAGE_ERROR: "storage operation failed",
+    ApiErrorCode.LOGICAL_RUN_MANIFEST_CORRUPT: (
+        "logical-run manifest is malformed, noncanonical, oversized, or unsupported"
+    ),
+    ApiErrorCode.LOGICAL_RUN_MANIFEST_CONFLICT: (
+        "logical-run manifest conflicts with exact page evidence"
+    ),
+    ApiErrorCode.LOGICAL_RUN_MANIFEST_ORPHANED: (
+        "logical-run manifest references missing page evidence"
+    ),
+    ApiErrorCode.LOGICAL_RUN_MANIFEST_WRITE_UNCERTAIN: (
+        "logical-run manifest publication outcome remains uncertain"
+    ),
 }
 
 
@@ -155,6 +183,18 @@ class ApiStorage(Protocol):
     """Narrow shared-storage behavior consumed by API ingestion."""
 
     @abstractmethod
+    def download_spooled(
+        self,
+        key: str,
+        *,
+        maximum_bytes: int,
+        spool_threshold_bytes: int,
+        expected_checksum_sha256: str | None = None,
+        expected_content_length: int | None = None,
+    ) -> AbstractContextManager[DownloadedObject]:
+        raise AssertionError("protocol method has no runtime implementation")
+
+    @abstractmethod
     def reconcile_payload_manifest(
         self,
         payload_key: str,
@@ -185,6 +225,7 @@ class ApiIngestionResult:
     event: ApiRunEvent
     payload_keys: tuple[str, ...]
     manifest_keys: tuple[str, ...]
+    logical_run_manifest_key: str
     manifests: tuple[Manifest, ...]
 
 
@@ -225,10 +266,11 @@ def validate_backfill_range(*, from_date: date, to_date: date, max_days: int) ->
 def ingest_api_date(
     *,
     client: httpx.Client,
-    storage: ApiStorage,
     http_config: HttpConfig,
     descriptor: ApiSourceDescriptor,
     source_date: date,
+    storage: ApiStorage | None = None,
+    storage_session_provider: (Callable[[], AbstractContextManager[ApiStorage]] | None) = None,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     utc_now: Callable[[], datetime] | None = None,
@@ -236,9 +278,114 @@ def ingest_api_date(
     query_parameter_provider: Callable[[int], Mapping[str, str]] | None = None,
     event_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> ApiIngestionResult:
-    """Fetch, preserve, validate, and manifest one strictly sequential logical batch."""
-    wall_clock = utc_now or _utc_now
+    """Own one storage session and one terminal pair for a logical API attempt."""
     started_at = monotonic()
+    identity = api_page_identity(descriptor, source_date, page_size=http_config.page_size)
+    batch_id = derive_batch_id(identity)
+    run_id = run_id_factory()
+    terminal = TerminalEmitter(event_sink)
+    result: ApiIngestionResult | None = None
+
+    def relay_nonterminal(event: dict[str, object]) -> None:
+        if event.get("event") in {"api_ingestion", "run_summary"}:
+            return
+        if event_sink is not None:
+            event_sink(event)
+
+    try:
+        with _api_storage_context(
+            storage=storage,
+            storage_session_provider=storage_session_provider,
+        ) as active_storage:
+            result = _ingest_api_date_with_storage(
+                client=client,
+                storage=active_storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                monotonic=monotonic,
+                sleep=sleep,
+                utc_now=utc_now,
+                run_id_factory=lambda: run_id,
+                query_parameter_provider=query_parameter_provider,
+                event_sink=relay_nonterminal,
+                attempt_started_at=started_at,
+            )
+    except ApiIngestionError as error:
+        terminal.emit(error.event.to_dict(), error.summary)
+        raise
+    except StorageError as error:
+        if result is None:
+            summary = _run_summary(
+                _RunMetrics(),
+                started_at=started_at,
+                monotonic=monotonic,
+                source_date=source_date,
+                batch_id=batch_id,
+                run_id=run_id,
+            )
+            page: int | None = 1
+        else:
+            duration = monotonic() - started_at
+            if duration < 0:
+                raise RuntimeError("monotonic clock moved backwards") from error
+            summary = replace(result.summary, duration_seconds=duration)
+            page = None
+        event = ApiRunEvent(
+            status=ApiRunStatus.FAILED,
+            source_date=source_date,
+            batch_id=batch_id,
+            run_id=run_id,
+            page=page,
+            error_code=ApiErrorCode.STORAGE_ERROR,
+            http_status=None,
+            classification=None,
+            message=_FAILURE_MESSAGES[ApiErrorCode.STORAGE_ERROR],
+        )
+        terminal.emit(event.to_dict(), summary)
+        raise ApiIngestionError(
+            code=ApiErrorCode.STORAGE_ERROR,
+            summary=summary,
+            event=event,
+        ) from error
+
+    if result is None:
+        raise AssertionError("successful API ingestion has no result")
+    terminal.emit(result.event.to_dict(), result.summary)
+    return result
+
+
+def _api_storage_context(
+    *,
+    storage: ApiStorage | None,
+    storage_session_provider: Callable[[], AbstractContextManager[ApiStorage]] | None,
+) -> AbstractContextManager[ApiStorage]:
+    if (storage is None) == (storage_session_provider is None):
+        raise ValueError("exactly one API storage boundary must be supplied")
+    if storage_session_provider is not None:
+        return storage_session_provider()
+    assert storage is not None
+    return nullcontext(storage)
+
+
+def _ingest_api_date_with_storage(
+    *,
+    client: httpx.Client,
+    storage: ApiStorage,
+    http_config: HttpConfig,
+    descriptor: ApiSourceDescriptor,
+    source_date: date,
+    monotonic: Callable[[], float],
+    sleep: Callable[[float], None],
+    utc_now: Callable[[], datetime] | None,
+    run_id_factory: Callable[[], str],
+    query_parameter_provider: Callable[[int], Mapping[str, str]] | None,
+    event_sink: Callable[[dict[str, object]], None] | None,
+    attempt_started_at: float,
+) -> ApiIngestionResult:
+    """Run one API attempt against an already acquired storage boundary."""
+    wall_clock = utc_now or _utc_now
+    started_at = attempt_started_at
     identity = api_page_identity(descriptor, source_date, page_size=http_config.page_size)
     batch_id = derive_batch_id(identity)
     run_id = run_id_factory()
@@ -249,6 +396,8 @@ def ingest_api_date(
     expected_total_records: int | None = None
     payload_keys: list[str] = []
     manifests: list[Manifest] = []
+    page_evidence: list[PageEvidenceObservation] = []
+    verified_logical_run_key: str | None = None
 
     def observe_retry(retry: RetryEvent) -> None:
         if event_sink is None:
@@ -268,6 +417,13 @@ def ingest_api_date(
         )
 
     try:
+        logical_run_preflight = inspect_logical_run(storage, identity)
+        if logical_run_preflight.state not in {
+            LogicalRunReconciliationState.ABSENT,
+            LogicalRunReconciliationState.COMPLETE,
+        }:
+            raise _logical_run_state_error(logical_run_preflight)
+
         while True:
             extra_parameters = (
                 query_parameter_provider(page_number)
@@ -377,12 +533,61 @@ def ingest_api_date(
                 payload_keys.append(payload_key)
                 manifests.append(manifest)
                 metrics.records_read += len(parsed_page.items)
+                evidence = observe_page_evidence(
+                    storage,
+                    identity=identity,
+                    page_number=page_number,
+                    record_count=len(parsed_page.items),
+                    maximum_payload_bytes=http_config.max_response_bytes,
+                )
+                if evidence.state is not LogicalRunReconciliationState.ELIGIBLE:
+                    raise _logical_run_state_error(LogicalRunReconciliation(evidence.state))
+                page_evidence.append(evidence)
                 if expected_total_pages is None:
                     expected_total_pages = parsed_page.total_pages
                     expected_total_records = parsed_page.total_records
                 if parsed_page.next_page is None:
                     break
                 page_number = parsed_page.next_page
+
+        completion = reconcile_page_evidence(
+            identity=identity,
+            observations=page_evidence,
+            completion_run_id=run_id,
+            completed_at=wall_clock(),
+            existing_aggregate=(
+                logical_run_preflight.aggregate
+                if logical_run_preflight.state is LogicalRunReconciliationState.COMPLETE
+                else None
+            ),
+        )
+        if completion.state is LogicalRunReconciliationState.ELIGIBLE:
+            if completion.aggregate is None:
+                raise _logical_run_state_error(
+                    LogicalRunReconciliation(LogicalRunReconciliationState.CONFLICTING)
+                )
+            completion = publish_logical_run(
+                storage,
+                identity=identity,
+                manifest=completion.aggregate.manifest,
+            )
+        if (
+            completion.state is not LogicalRunReconciliationState.COMPLETE
+            or completion.aggregate is None
+        ):
+            raise _logical_run_state_error(completion)
+
+        final_verification = inspect_logical_run(storage, identity)
+        if (
+            final_verification.state is not LogicalRunReconciliationState.COMPLETE
+            or final_verification.aggregate is None
+        ):
+            raise _logical_run_state_error(final_verification)
+        if final_verification.aggregate.body != completion.aggregate.body:
+            raise _logical_run_state_error(
+                LogicalRunReconciliation(LogicalRunReconciliationState.CONFLICTING)
+            )
+        verified_logical_run_key = final_verification.aggregate.key
     except (
         ApiPageStateError,
         HttpPageFetchError,
@@ -415,6 +620,9 @@ def ingest_api_date(
         _emit_final(event_sink, event, summary)
         raise ApiIngestionError(code=code, summary=summary, event=event) from error
 
+    if verified_logical_run_key is None:
+        raise AssertionError("successful API ingestion has no verified logical-run manifest")
+
     summary = _run_summary(
         metrics,
         started_at=started_at,
@@ -440,6 +648,7 @@ def ingest_api_date(
         event=event,
         payload_keys=tuple(payload_keys),
         manifest_keys=tuple(manifest_key_for(key) for key in payload_keys),
+        logical_run_manifest_key=verified_logical_run_key,
         manifests=tuple(manifests),
     )
 
@@ -447,8 +656,9 @@ def ingest_api_date(
 def ingest_api_backfill(
     *,
     client: httpx.Client,
-    storage: ApiStorage,
     http_config: HttpConfig,
+    storage: ApiStorage | None = None,
+    storage_session_provider: (Callable[[], AbstractContextManager[ApiStorage]] | None) = None,
     descriptor: ApiSourceDescriptor,
     from_date: date,
     to_date: date,
@@ -478,6 +688,7 @@ def ingest_api_backfill(
             ingest_date(
                 client=client,
                 storage=storage,
+                storage_session_provider=storage_session_provider,
                 http_config=http_config,
                 descriptor=descriptor,
                 source_date=source_date,
@@ -615,6 +826,29 @@ def _write_manifest(storage: ApiStorage, manifest: Manifest) -> None:
             ApiErrorCode.STORAGE_CONFLICT,
             "missing manifest was not created under single-writer mode",
         )
+
+
+def _logical_run_state_error(
+    reconciliation: LogicalRunReconciliation,
+) -> ApiPageStateError:
+    if isinstance(reconciliation.cause, StorageBackendError):
+        raise reconciliation.cause
+    code_by_state = {
+        LogicalRunReconciliationState.CORRUPT: ApiErrorCode.LOGICAL_RUN_MANIFEST_CORRUPT,
+        LogicalRunReconciliationState.CONFLICTING: (ApiErrorCode.LOGICAL_RUN_MANIFEST_CONFLICT),
+        LogicalRunReconciliationState.ORPHANED: ApiErrorCode.LOGICAL_RUN_MANIFEST_ORPHANED,
+        LogicalRunReconciliationState.UNCERTAIN_WRITE: (
+            ApiErrorCode.LOGICAL_RUN_MANIFEST_WRITE_UNCERTAIN
+        ),
+        LogicalRunReconciliationState.INCOMPLETE: (ApiErrorCode.LOGICAL_RUN_MANIFEST_CONFLICT),
+        LogicalRunReconciliationState.FAILED: ApiErrorCode.COMPLETE_STATUS_CONFLICT,
+        LogicalRunReconciliationState.ABSENT: (ApiErrorCode.LOGICAL_RUN_MANIFEST_WRITE_UNCERTAIN),
+        LogicalRunReconciliationState.ELIGIBLE: (ApiErrorCode.LOGICAL_RUN_MANIFEST_CONFLICT),
+    }
+    code = code_by_state.get(reconciliation.state)
+    if code is None:
+        code = ApiErrorCode.LOGICAL_RUN_MANIFEST_CONFLICT
+    return ApiPageStateError(code, _FAILURE_MESSAGES[code])
 
 
 def _classify_failure(

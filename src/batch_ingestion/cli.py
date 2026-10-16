@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from collections.abc import Mapping, Sequence
-from contextlib import closing
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from enum import IntEnum
@@ -18,13 +18,14 @@ from botocore.exceptions import BotoCoreError
 from batch_ingestion.api.client import open_http_client
 from batch_ingestion.api.service import (
     ApiIngestionError,
+    ApiStorage,
     ingest_api_backfill,
     ingest_api_date,
     validate_backfill_range,
 )
 from batch_ingestion.api.sources import get_source_descriptor
 from batch_ingestion.config import AppConfig, ConfigurationError
-from batch_ingestion.storage import S3Storage, StorageError, create_s3_client
+from batch_ingestion.storage import StorageError, storage_session
 
 _SOURCE_CHOICES = ("fx-rates", "shipping-statuses")
 
@@ -174,16 +175,15 @@ def main(
     def event_sink(event: dict[str, object]) -> None:
         _emit(event, output=destination)
 
+    def storage_session_provider() -> AbstractContextManager[ApiStorage]:
+        return storage_session(config.storage)
+
     try:
-        with (
-            closing(create_s3_client(config.storage)) as s3_client,
-            open_http_client(config.http) as http_client,
-        ):
-            storage = S3Storage(client=s3_client, bucket=config.storage.bucket)
+        with open_http_client(config.http) as http_client:
             if isinstance(command, RunCommand):
                 ingest_api_date(
                     client=http_client,
-                    storage=storage,
+                    storage_session_provider=storage_session_provider,
                     http_config=config.http,
                     descriptor=descriptor,
                     source_date=command.source_date,
@@ -192,7 +192,7 @@ def main(
             else:
                 ingest_api_backfill(
                     client=http_client,
-                    storage=storage,
+                    storage_session_provider=storage_session_provider,
                     http_config=config.http,
                     descriptor=descriptor,
                     from_date=command.from_date,

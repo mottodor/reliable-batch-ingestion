@@ -8,12 +8,18 @@ from contextlib import closing
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from typing import BinaryIO
 
 import pytest
 from mock_api.app import MALFORMED_JSON_BODY
 from mypy_boto3_s3 import S3Client
 
 from batch_ingestion.api.client import open_http_client
+from batch_ingestion.api.logical_manifest import (
+    API_LOGICAL_RUN_MANIFEST_CONTENT_TYPE,
+    ApiLogicalRunManifest,
+    api_logical_run_manifest_key,
+)
 from batch_ingestion.api.service import (
     ApiErrorCode,
     ApiIngestionError,
@@ -24,7 +30,7 @@ from batch_ingestion.api.sources import api_page_identity, get_source_descriptor
 from batch_ingestion.config import AppConfig, HttpConfig
 from batch_ingestion.identifiers import manifest_key_for, raw_object_key
 from batch_ingestion.manifests import Manifest, ManifestStatus
-from batch_ingestion.storage import S3Storage, create_s3_client
+from batch_ingestion.storage import ImmutableWriteResult, S3Storage, create_s3_client
 
 pytestmark = pytest.mark.integration
 
@@ -90,10 +96,40 @@ def _page_keys(
     return payload_keys, tuple(manifest_key_for(key) for key in payload_keys)
 
 
+def _logical_run_key(
+    descriptor_name: str,
+    source_date: date,
+    http_config: HttpConfig,
+) -> str:
+    descriptor = get_source_descriptor(descriptor_name)
+    identity = api_page_identity(descriptor, source_date, page_size=http_config.page_size)
+    return api_logical_run_manifest_key(identity)
+
+
 def _object_bytes(client: S3Client, app_config: AppConfig, key: str) -> bytes:
     response = client.get_object(Bucket=app_config.storage.bucket, Key=key)
     with closing(response["Body"]):
         return response["Body"].read()
+
+
+def _key_exists(client: S3Client, app_config: AppConfig, key: str) -> bool:
+    contents = client.list_objects_v2(
+        Bucket=app_config.storage.bucket,
+        Prefix=key,
+    ).get("Contents", [])
+    return any(item.get("Key") == key for item in contents)
+
+
+def _existing_inventory(
+    client: S3Client,
+    app_config: AppConfig,
+    keys: tuple[str, ...],
+) -> dict[str, bytes]:
+    return {
+        key: _object_bytes(client, app_config, key)
+        for key in keys
+        if _key_exists(client, app_config, key)
+    }
 
 
 def _exact_batch_inventory(
@@ -101,8 +137,9 @@ def _exact_batch_inventory(
     app_config: AppConfig,
     payload_keys: tuple[str, ...],
     manifest_keys: tuple[str, ...],
+    logical_run_manifest_keys: tuple[str, ...],
 ) -> dict[str, str]:
-    expected_keys = {*payload_keys, *manifest_keys}
+    expected_keys = {*payload_keys, *manifest_keys, *logical_run_manifest_keys}
     prefixes = {key.rsplit("/", 1)[0] + "/" for key in expected_keys}
     found_keys: set[str] = set()
     for prefix in prefixes:
@@ -116,6 +153,47 @@ def _exact_batch_inventory(
         key: hashlib.sha256(_object_bytes(client, app_config, key)).hexdigest()
         for key in sorted(found_keys)
     }
+
+
+class _AggregateWriteFaultStorage(S3Storage):
+    def __init__(
+        self,
+        *,
+        client: S3Client,
+        bucket: str,
+        write_then_raise: bool,
+    ) -> None:
+        super().__init__(client=client, bucket=bucket)
+        self._write_then_raise = write_then_raise
+        self.aggregate_write_attempts = 0
+
+    def write_immutable(
+        self,
+        key: str,
+        stream: BinaryIO,
+        *,
+        content_length: int,
+        checksum_sha256: str,
+        content_type: str,
+    ) -> ImmutableWriteResult:
+        if not key.endswith("/logical-run.manifest.json"):
+            return super().write_immutable(
+                key,
+                stream,
+                content_length=content_length,
+                checksum_sha256=checksum_sha256,
+                content_type=content_type,
+            )
+        self.aggregate_write_attempts += 1
+        if self._write_then_raise and self.aggregate_write_attempts == 1:
+            super().write_immutable(
+                key,
+                stream,
+                content_length=content_length,
+                checksum_sha256=checksum_sha256,
+                content_type=content_type,
+            )
+        raise RuntimeError("injected aggregate write uncertainty")
 
 
 @pytest.mark.parametrize(
@@ -151,7 +229,8 @@ def test_live_happy_path_preserves_exact_pages_and_manifests(
         for page in range(1, expected_pages + 1)
     )
     manifest_keys = tuple(manifest_key_for(key) for key in payload_keys)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_key = api_logical_run_manifest_key(identity)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
     _delete_exact_keys(s3_client, app_config, all_keys)
 
     storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
@@ -182,6 +261,7 @@ def test_live_happy_path_preserves_exact_pages_and_manifests(
 
         assert result.payload_keys == payload_keys
         assert result.manifest_keys == manifest_keys
+        assert result.logical_run_manifest_key == aggregate_key
         assert result.summary.records_read == expected_records
         assert result.summary.records_accepted == expected_records
         assert result.summary.pages_fetched == expected_pages
@@ -227,7 +307,34 @@ def test_live_happy_path_preserves_exact_pages_and_manifests(
             key for item in manifest_inventory if (key := item.get("Key")) is not None
         }
         assert raw_keys == set(payload_keys)
-        assert manifest_keys_found == set(manifest_keys)
+        assert manifest_keys_found == {*manifest_keys, aggregate_key}
+
+        aggregate = ApiLogicalRunManifest.from_bytes(
+            _object_bytes(s3_client, app_config, aggregate_key)
+        )
+        assert aggregate.completion_run_id == run_id
+        assert tuple(page.object_key for page in aggregate.pages) == payload_keys
+        first_inventory = _existing_inventory(s3_client, app_config, all_keys)
+
+        with open_http_client(http_config) as client:
+            replay = ingest_api_date(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                sleep=lambda _: pytest.fail("complete replay must not sleep"),
+                run_id_factory=lambda: "run_50500000000000000000000000000099",
+            )
+
+        assert replay.summary.bytes_written == 0
+        assert replay.summary.duplicate_count == expected_pages
+        assert _existing_inventory(s3_client, app_config, all_keys) == first_inventory
+        replayed = ApiLogicalRunManifest.from_bytes(
+            _object_bytes(s3_client, app_config, aggregate_key)
+        )
+        assert replayed.completion_run_id == run_id
+        assert replayed.completed_at == aggregate.completed_at
     finally:
         _delete_exact_keys(s3_client, app_config, all_keys)
 
@@ -240,7 +347,8 @@ def test_live_rate_limit_once_retries_with_selected_delay(
     descriptor = get_source_descriptor("fx-rates")
     http_config = replace(app_config.http, page_size=3, max_attempts=3)
     payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
     scenario_key = "bi050-slice3-rate-limit"
     delays: list[float] = []
     events: list[dict[str, object]] = []
@@ -293,7 +401,8 @@ def test_live_permanent_500_exhausts_attempts_without_page_objects(
     descriptor = get_source_descriptor("fx-rates")
     http_config = replace(app_config.http, page_size=3, max_attempts=3)
     payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
     delays: list[float] = []
     _delete_exact_keys(s3_client, app_config, all_keys)
     storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
@@ -316,6 +425,7 @@ def test_live_permanent_500_exhausts_attempts_without_page_objects(
 
         assert captured.value.code is ApiErrorCode.HTTP_RETRY_EXHAUSTED
         assert captured.value.summary.retry_count == 2
+        assert not _key_exists(s3_client, app_config, aggregate_key)
         assert captured.value.summary.pages_fetched == 0
         assert delays == [http_config.backoff_base_seconds, http_config.backoff_base_seconds * 2]
         prefix = payload_keys[0].rsplit("/", 1)[0] + "/"
@@ -337,7 +447,8 @@ def test_live_malformed_json_preserves_exact_body_and_failed_manifest(
     descriptor = get_source_descriptor("fx-rates")
     http_config = replace(app_config.http, page_size=3)
     payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
     _delete_exact_keys(s3_client, app_config, all_keys)
     storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
 
@@ -368,6 +479,7 @@ def test_live_malformed_json_preserves_exact_body_and_failed_manifest(
         assert manifest.status is ManifestStatus.FAILED
         assert manifest.checksum_sha256 == hashlib.sha256(MALFORMED_JSON_BODY).hexdigest()
         assert manifest.object_key == payload_keys[0]
+        assert not _key_exists(s3_client, app_config, aggregate_key)
     finally:
         _delete_exact_keys(s3_client, app_config, all_keys)
 
@@ -380,7 +492,8 @@ def test_live_partial_pages_rerun_reuses_complete_page_and_finishes(
     descriptor = get_source_descriptor("fx-rates")
     http_config = replace(app_config.http, page_size=3, max_attempts=2)
     payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
     _delete_exact_keys(s3_client, app_config, all_keys)
     storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
 
@@ -424,6 +537,21 @@ def test_live_partial_pages_rerun_reuses_complete_page_and_finishes(
         assert _object_bytes(s3_client, app_config, payload_keys[0]) == page_one_before
         assert _object_bytes(s3_client, app_config, manifest_keys[0]) == manifest_one_before
         assert len(result.payload_keys) == 2
+        aggregate = ApiLogicalRunManifest.from_bytes(
+            _object_bytes(s3_client, app_config, aggregate_key)
+        )
+        page_manifests = tuple(
+            Manifest.from_json(_object_bytes(s3_client, app_config, key).decode())
+            for key in manifest_keys
+        )
+        assert tuple(manifest.run_id for manifest in page_manifests) == (
+            "run_50500000000000000000000000000006",
+            "run_50500000000000000000000000000007",
+        )
+        assert tuple(page.page_manifest_checksum_sha256 for page in aggregate.pages) == tuple(
+            hashlib.sha256(_object_bytes(s3_client, app_config, key)).hexdigest()
+            for key in manifest_keys
+        )
     finally:
         _delete_exact_keys(s3_client, app_config, all_keys)
 
@@ -436,7 +564,8 @@ def test_live_payload_only_page_gains_manifest_without_payload_rewrite(
     descriptor = get_source_descriptor("fx-rates")
     http_config = replace(app_config.http, page_size=3)
     payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
     _delete_exact_keys(s3_client, app_config, all_keys)
     storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
 
@@ -480,6 +609,217 @@ def test_live_payload_only_page_gains_manifest_without_payload_rewrite(
             _object_bytes(s3_client, app_config, payload_keys[1])
         )
         assert result.summary.duplicate_count == 0
+        assert _key_exists(s3_client, app_config, aggregate_key)
+    finally:
+        _delete_exact_keys(s3_client, app_config, all_keys)
+
+
+def test_live_final_page_interruption_and_legacy_page_only_replay_publish_only_aggregate(
+    app_config: AppConfig,
+    s3_client: S3Client,
+) -> None:
+    source_date = date(2099, 12, 25)
+    descriptor = get_source_descriptor("fx-rates")
+    http_config = replace(app_config.http, page_size=3)
+    payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    page_keys = (*payload_keys, *manifest_keys)
+    all_keys = (*page_keys, aggregate_key)
+    _delete_exact_keys(s3_client, app_config, all_keys)
+    interrupted = _AggregateWriteFaultStorage(
+        client=s3_client,
+        bucket=app_config.storage.bucket,
+        write_then_raise=False,
+    )
+
+    try:
+        with (
+            open_http_client(http_config) as client,
+            pytest.raises(ApiIngestionError) as captured,
+        ):
+            ingest_api_date(
+                client=client,
+                storage=interrupted,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                sleep=lambda _: pytest.fail("aggregate interruption must not retry HTTP"),
+                run_id_factory=lambda: "run_50500000000000000000000000000009",
+            )
+        assert captured.value.code is ApiErrorCode.LOGICAL_RUN_MANIFEST_WRITE_UNCERTAIN
+        assert interrupted.aggregate_write_attempts == 2
+        assert not _key_exists(s3_client, app_config, aggregate_key)
+        page_inventory = _existing_inventory(s3_client, app_config, page_keys)
+        assert set(page_inventory) == set(page_keys)
+
+        storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
+        with open_http_client(http_config) as client:
+            recovered = ingest_api_date(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                sleep=lambda _: pytest.fail("legacy recovery must not retry HTTP"),
+                run_id_factory=lambda: "run_5050000000000000000000000000000a",
+            )
+        assert recovered.summary.bytes_written == 0
+        assert recovered.summary.duplicate_count == 2
+        assert _existing_inventory(s3_client, app_config, page_keys) == page_inventory
+        first_aggregate = _object_bytes(s3_client, app_config, aggregate_key)
+
+        s3_client.delete_object(Bucket=app_config.storage.bucket, Key=aggregate_key)
+        with open_http_client(http_config) as client:
+            upgraded = ingest_api_date(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                sleep=lambda _: pytest.fail("legacy replay must not retry HTTP"),
+                run_id_factory=lambda: "run_5050000000000000000000000000000b",
+            )
+        assert upgraded.summary.bytes_written == 0
+        assert upgraded.summary.duplicate_count == 2
+        assert _existing_inventory(s3_client, app_config, page_keys) == page_inventory
+        assert _object_bytes(s3_client, app_config, aggregate_key) != first_aggregate
+        assert (
+            ApiLogicalRunManifest.from_bytes(
+                _object_bytes(s3_client, app_config, aggregate_key)
+            ).completion_run_id
+            == "run_5050000000000000000000000000000b"
+        )
+    finally:
+        _delete_exact_keys(s3_client, app_config, all_keys)
+
+
+def test_live_write_then_uncertain_reuses_exact_garage_bytes(
+    app_config: AppConfig,
+    s3_client: S3Client,
+) -> None:
+    source_date = date(2099, 12, 26)
+    descriptor = get_source_descriptor("fx-rates")
+    http_config = replace(app_config.http, page_size=3)
+    payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
+    _delete_exact_keys(s3_client, app_config, all_keys)
+    storage = _AggregateWriteFaultStorage(
+        client=s3_client,
+        bucket=app_config.storage.bucket,
+        write_then_raise=True,
+    )
+
+    try:
+        with open_http_client(http_config) as client:
+            result = ingest_api_date(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                sleep=lambda _: pytest.fail("uncertain aggregate recovery must not retry HTTP"),
+                run_id_factory=lambda: "run_5050000000000000000000000000000c",
+            )
+        assert storage.aggregate_write_attempts == 1
+        assert result.logical_run_manifest_key == aggregate_key
+        assert (
+            ApiLogicalRunManifest.from_bytes(
+                _object_bytes(s3_client, app_config, aggregate_key)
+            ).completion_run_id
+            == "run_5050000000000000000000000000000c"
+        )
+        _exact_batch_inventory(
+            s3_client,
+            app_config,
+            payload_keys,
+            manifest_keys,
+            (aggregate_key,),
+        )
+    finally:
+        _delete_exact_keys(s3_client, app_config, all_keys)
+
+
+@pytest.mark.parametrize(
+    ("damage", "source_date", "expected_code"),
+    [
+        ("malformed", date(2099, 11, 27), ApiErrorCode.LOGICAL_RUN_MANIFEST_CORRUPT),
+        ("noncanonical", date(2099, 11, 28), ApiErrorCode.LOGICAL_RUN_MANIFEST_CORRUPT),
+        ("conflicting", date(2099, 11, 29), ApiErrorCode.LOGICAL_RUN_MANIFEST_CONFLICT),
+        ("orphaned", date(2099, 11, 30), ApiErrorCode.LOGICAL_RUN_MANIFEST_ORPHANED),
+    ],
+)
+def test_live_invalid_aggregate_blocks_mutation_and_retains_damaged_evidence(
+    app_config: AppConfig,
+    s3_client: S3Client,
+    damage: str,
+    source_date: date,
+    expected_code: ApiErrorCode,
+) -> None:
+    descriptor = get_source_descriptor("fx-rates")
+    http_config = replace(app_config.http, page_size=3)
+    payload_keys, manifest_keys = _page_keys("fx-rates", source_date, http_config, 2)
+    aggregate_key = _logical_run_key("fx-rates", source_date, http_config)
+    all_keys = (*payload_keys, *manifest_keys, aggregate_key)
+    _delete_exact_keys(s3_client, app_config, all_keys)
+    storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
+
+    try:
+        with open_http_client(http_config) as client:
+            ingest_api_date(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                sleep=lambda _: pytest.fail("setup ingestion must not retry"),
+                run_id_factory=lambda: "run_5050000000000000000000000000000d",
+            )
+        aggregate_bytes = _object_bytes(s3_client, app_config, aggregate_key)
+        if damage == "malformed":
+            damaged_aggregate = b'{"manifest_type":'
+        elif damage == "noncanonical":
+            damaged_aggregate = aggregate_bytes + b"\n"
+        elif damage == "conflicting":
+            aggregate = ApiLogicalRunManifest.from_bytes(aggregate_bytes)
+            damaged_page = replace(
+                aggregate.pages[0],
+                payload_checksum_sha256="f" * 64,
+            )
+            damaged_aggregate = replace(
+                aggregate,
+                pages=(damaged_page, *aggregate.pages[1:]),
+            ).to_bytes()
+        else:
+            damaged_aggregate = aggregate_bytes
+            s3_client.delete_object(Bucket=app_config.storage.bucket, Key=payload_keys[0])
+        s3_client.put_object(
+            Bucket=app_config.storage.bucket,
+            Key=aggregate_key,
+            Body=damaged_aggregate,
+            ContentLength=len(damaged_aggregate),
+            ContentType=API_LOGICAL_RUN_MANIFEST_CONTENT_TYPE,
+        )
+        damaged_inventory = _existing_inventory(s3_client, app_config, all_keys)
+
+        with (
+            open_http_client(http_config) as client,
+            pytest.raises(ApiIngestionError) as captured,
+        ):
+            ingest_api_date(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=source_date,
+                sleep=lambda _: pytest.fail("invalid aggregate preflight must not retry"),
+                run_id_factory=lambda: "run_5050000000000000000000000000000e",
+            )
+
+        assert captured.value.code is expected_code
+        assert _existing_inventory(s3_client, app_config, all_keys) == damaged_inventory
+        if damage == "orphaned":
+            assert not _key_exists(s3_client, app_config, payload_keys[0])
     finally:
         _delete_exact_keys(s3_client, app_config, all_keys)
 
@@ -497,7 +837,10 @@ def test_live_inclusive_backfill_repeat_has_identical_inventory_and_duplicate_me
     ]
     payload_keys = tuple(key for payloads, _ in date_keys for key in payloads)
     manifest_keys = tuple(key for _, manifests in date_keys for key in manifests)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_keys = tuple(
+        _logical_run_key("fx-rates", date(2099, 12, day), http_config) for day in range(10, 13)
+    )
+    all_keys = (*payload_keys, *manifest_keys, *aggregate_keys)
     run_ids = iter(f"run_{index:032x}" for index in range(101, 107))
     _delete_exact_keys(s3_client, app_config, all_keys)
     storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
@@ -519,6 +862,7 @@ def test_live_inclusive_backfill_repeat_has_identical_inventory_and_duplicate_me
             app_config,
             payload_keys,
             manifest_keys,
+            aggregate_keys,
         )
 
         with open_http_client(http_config) as client:
@@ -537,6 +881,7 @@ def test_live_inclusive_backfill_repeat_has_identical_inventory_and_duplicate_me
             app_config,
             payload_keys,
             manifest_keys,
+            aggregate_keys,
         )
 
         assert [result.summary.source_date for result in first.results] == [
@@ -549,6 +894,106 @@ def test_live_inclusive_backfill_repeat_has_identical_inventory_and_duplicate_me
         assert all(result.summary.bytes_written == 0 for result in repeated.results)
         assert all(result.summary.duplicate_count == 2 for result in repeated.results)
         assert repeated_inventory == first_inventory
+        assert tuple(result.logical_run_manifest_key for result in first.results) == aggregate_keys
+        assert (
+            tuple(result.logical_run_manifest_key for result in repeated.results) == aggregate_keys
+        )
+    finally:
+        _delete_exact_keys(s3_client, app_config, all_keys)
+
+
+def test_live_backfill_stops_at_conflicting_aggregate_before_later_date(
+    app_config: AppConfig,
+    s3_client: S3Client,
+) -> None:
+    from_date = date(2099, 12, 1)
+    conflicting_date = date(2099, 12, 2)
+    to_date = date(2099, 12, 3)
+    descriptor = get_source_descriptor("fx-rates")
+    http_config = replace(app_config.http, page_size=3)
+    date_keys = {
+        source_date: _page_keys("fx-rates", source_date, http_config, 2)
+        for source_date in (from_date, conflicting_date, to_date)
+    }
+    aggregate_keys = {
+        source_date: _logical_run_key("fx-rates", source_date, http_config)
+        for source_date in date_keys
+    }
+    all_keys = tuple(
+        key
+        for source_date, (payloads, manifests) in date_keys.items()
+        for key in (*payloads, *manifests, aggregate_keys[source_date])
+    )
+    _delete_exact_keys(s3_client, app_config, all_keys)
+    storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
+    run_ids = iter(f"run_{index:032x}" for index in range(301, 305))
+
+    try:
+        with open_http_client(http_config) as client:
+            ingest_api_date(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                source_date=conflicting_date,
+                sleep=lambda _: pytest.fail("setup ingestion must not retry"),
+                run_id_factory=lambda: next(run_ids),
+            )
+        conflicting_key = aggregate_keys[conflicting_date]
+        aggregate = ApiLogicalRunManifest.from_bytes(
+            _object_bytes(s3_client, app_config, conflicting_key)
+        )
+        damaged_page = replace(aggregate.pages[0], payload_checksum_sha256="e" * 64)
+        damaged_aggregate = replace(
+            aggregate,
+            pages=(damaged_page, *aggregate.pages[1:]),
+        ).to_bytes()
+        s3_client.put_object(
+            Bucket=app_config.storage.bucket,
+            Key=conflicting_key,
+            Body=damaged_aggregate,
+            ContentLength=len(damaged_aggregate),
+            ContentType=API_LOGICAL_RUN_MANIFEST_CONTENT_TYPE,
+        )
+        middle_keys = (
+            *date_keys[conflicting_date][0],
+            *date_keys[conflicting_date][1],
+            conflicting_key,
+        )
+        middle_inventory = _existing_inventory(s3_client, app_config, middle_keys)
+
+        with (
+            open_http_client(http_config) as client,
+            pytest.raises(ApiIngestionError) as captured,
+        ):
+            ingest_api_backfill(
+                client=client,
+                storage=storage,
+                http_config=http_config,
+                descriptor=descriptor,
+                from_date=from_date,
+                to_date=to_date,
+                sleep=lambda _: pytest.fail("aggregate failure must not retry HTTP"),
+                run_id_factory=lambda: next(run_ids),
+            )
+
+        assert captured.value.code is ApiErrorCode.LOGICAL_RUN_MANIFEST_CONFLICT
+        assert captured.value.event.source_date == conflicting_date
+        first_payloads, first_manifests = date_keys[from_date]
+        _exact_batch_inventory(
+            s3_client,
+            app_config,
+            first_payloads,
+            first_manifests,
+            (aggregate_keys[from_date],),
+        )
+        assert _existing_inventory(s3_client, app_config, middle_keys) == middle_inventory
+        later_keys = (
+            *date_keys[to_date][0],
+            *date_keys[to_date][1],
+            aggregate_keys[to_date],
+        )
+        assert _existing_inventory(s3_client, app_config, later_keys) == {}
     finally:
         _delete_exact_keys(s3_client, app_config, all_keys)
 
@@ -568,7 +1013,10 @@ def test_live_backfill_stops_on_middle_date_then_full_rerun_resumes_safely(
     }
     payload_keys = tuple(key for payloads, _ in date_keys.values() for key in payloads)
     manifest_keys = tuple(key for _, manifests in date_keys.values() for key in manifests)
-    all_keys = (*payload_keys, *manifest_keys)
+    aggregate_keys = tuple(
+        _logical_run_key("fx-rates", source_date, http_config) for source_date in date_keys
+    )
+    all_keys = (*payload_keys, *manifest_keys, *aggregate_keys)
     run_ids = iter(f"run_{index:032x}" for index in range(201, 206))
     _delete_exact_keys(s3_client, app_config, all_keys)
     storage = S3Storage(client=s3_client, bucket=app_config.storage.bucket)
@@ -600,10 +1048,15 @@ def test_live_backfill_stops_on_middle_date_then_full_rerun_resumes_safely(
             app_config,
             first_payloads,
             first_manifests,
+            (_logical_run_key("fx-rates", from_date, http_config),),
         )
         for source_date in (failed_date, to_date):
             date_payloads, date_manifests = date_keys[source_date]
-            for key in (*date_payloads, *date_manifests):
+            for key in (
+                *date_payloads,
+                *date_manifests,
+                _logical_run_key("fx-rates", source_date, http_config),
+            ):
                 assert (
                     s3_client.list_objects_v2(
                         Bucket=app_config.storage.bucket,
@@ -637,9 +1090,16 @@ def test_live_backfill_stops_on_middle_date_then_full_rerun_resumes_safely(
                 app_config,
                 first_payloads,
                 first_manifests,
+                (_logical_run_key("fx-rates", from_date, http_config),),
             )
             == first_inventory
         )
-        _exact_batch_inventory(s3_client, app_config, payload_keys, manifest_keys)
+        _exact_batch_inventory(
+            s3_client,
+            app_config,
+            payload_keys,
+            manifest_keys,
+            aggregate_keys,
+        )
     finally:
         _delete_exact_keys(s3_client, app_config, all_keys)

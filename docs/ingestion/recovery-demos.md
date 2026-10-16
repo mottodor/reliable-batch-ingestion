@@ -25,13 +25,13 @@ make demo-inspect
 
 Every command is bounded by `DEMO_TIMEOUT_SECONDS` (default `210`). Standard output is compact NDJSON. Production ingestion events and `RunSummary` values are relayed unchanged; `demo_state` records asserted intermediate/final states; one terminal `demo_summary` reports whether the orchestration passed. Reports and strict non-secret descriptors are stored under ignored `artifacts/demo/<compose-project>/`.
 
-The public demos preserve evidence. They do not delete a matching batch to manufacture a first run. `demo-inspect` is read-only: it loads recorded descriptors, calculates exact prefixes, compares exact key sets, streams object bytes for SHA-256 independently of `ETag`, validates manifest linkage/status, checks file dispositions, and validates snapshot Parquet rows and bounds.
+The public demos preserve evidence. They do not delete a matching batch to manufacture a first run. `demo-inspect` is read-only: it loads recorded descriptors, calculates exact prefixes, compares exact key sets, streams object bytes for SHA-256 independently of `ETag`, validates page-manifest linkage/status, strictly parses one logical-run aggregate for every successful API batch, cross-checks its raw/page-manifest checksums, checks file dispositions, and validates snapshot Parquet rows and bounds. Failed API batches must not claim aggregate completion.
 
 ## Reading recovery exits
 
 A successful `make demo-recovery ...` command exits `0` only after the expected underlying failure and object state have been observed and the recovery/final action has been verified. `demo_summary.attempted_exit_class` is therefore `expected_failure` even when the injected operation itself exited with a source-specific code. Unexpected exits, timeouts, or state differences make the wrapper non-zero.
 
-Underlying production CLI exits remain `0` for success, `2` for invalid command input, `3` for invalid configuration, `4` for a handled ingestion failure or retained file rejection, and `5` for runtime setup/cleanup failure. Abrupt demo-only process boundaries use private exit `86`; that code is not a production CLI contract.
+Underlying production CLI exits remain `0` for success, `2` for invalid command input, `3` for invalid configuration, `4` for a handled ingestion failure or retained file rejection, and `5` for unexpected non-source runtime setup/cleanup failure. A known backend S3 failure inside an identified REST, file, or snapshot attempt uses exit `4` after its source terminal event and final summary. Abrupt demo-only process boundaries use private exit `86`; that code is not a production CLI contract.
 
 ## Failure and recovery exercises
 
@@ -47,7 +47,7 @@ make demo-recovery SCENARIO=api-rate-limit
 
 **Recovery or terminal action:** No separate command is needed when the bounded retry succeeds. If real rate limiting outlasts the configured budget, rerun the same normal `make ingest-api ARGS="run ..."` command after the source permits requests.
 
-**Final state:** The calculated API page inventory is complete with succeeded manifests, exactly one retry is reported, and no error-response object exists.
+**Final state:** The calculated API inventory is complete with succeeded page manifests and one verified logical-run aggregate, exactly one retry is reported, and no error-response object exists.
 
 ### `api-permanent-500`
 
@@ -57,11 +57,11 @@ make demo-recovery SCENARIO=api-permanent-500
 
 **Trigger and expected exit:** The demo worker selects permanent HTTP 500 through the exact application attempt budget. The underlying API CLI exits handled code `4`; the wrapper expects that failure and remains bounded.
 
-**Intermediate state:** No raw object or manifest exists for the failed non-200 page. If an operation had completed earlier pages, those complete pairs would remain immutable; this fixed first-page exercise asserts `absent` for page 1.
+**Intermediate state:** No raw object or page manifest exists for the failed non-200 page, and no logical-run aggregate exists. If an operation had completed earlier pages, those complete pairs would remain immutable; this fixed first-page exercise asserts `absent` for page 1.
 
 **Recovery or terminal action:** The worker removes the private fault selection, and the parent reruns the same normal API operation. Outside the demo, fix or clear the source fault and rerun `make ingest-api ARGS="run --source fx-rates --date <same-date>"` (or the original full backfill).
 
-**Final state:** Normal ingestion creates the exact successful page pairs. Previously complete evidence, when present, is verified and reused rather than rewritten.
+**Final state:** Normal ingestion creates the exact successful page pairs and publishes one verified logical-run aggregate last. Previously complete evidence, when present, is verified and reused rather than rewritten.
 
 ### `api-malformed-json`
 
@@ -71,11 +71,11 @@ make demo-recovery SCENARIO=api-malformed-json
 
 **Trigger and expected exit:** The mock source returns HTTP 200 with deterministic malformed JSON. Raw bytes are preserved before parsing, one terminal failed manifest is written, and the API operation exits handled code `4`.
 
-**Intermediate state:** The raw payload and its linked manifest form a complete pair; manifest status is `failed`. The runner records the payload SHA-256 and original manifest bytes.
+**Intermediate state:** The raw payload and its linked page manifest form a complete pair; manifest status is `failed`. The logical-run aggregate is absent. The runner records the payload SHA-256 and original manifest bytes.
 
 **Recovery or terminal action:** The same faulted operation is run again and must exit `4` while re-surfacing the unchanged terminal pair. This batch is not repaired in place. Corrected upstream bytes require a reviewed new logical identity/source date and a normal ingestion command for that identity.
 
-**Final state:** Malformed bytes, checksum, manifest bytes, failed status, and original `run_id` remain unchanged. No corrected content overwrites the retained batch.
+**Final state:** Malformed bytes, checksum, page-manifest bytes, failed status, and original `run_id` remain unchanged. No aggregate is published and no corrected content overwrites the retained batch.
 
 ### `api-after-page`
 
@@ -85,11 +85,11 @@ make demo-recovery SCENARIO=api-after-page
 
 **Trigger and expected exit:** A private worker exits `86` only after page 1 raw and manifest writes are complete. On safe repeat execution, an already recovered worker may exit `0` instead of recreating the crash.
 
-**Intermediate state:** On first execution page 1 is `complete` and page 2 is `absent`. No mutable page checkpoint is written.
+**Intermediate state:** On first execution page 1 is `complete`, page 2 is `absent`, and the logical-run aggregate is absent. No mutable page checkpoint is written.
 
 **Recovery or terminal action:** The parent invokes the normal API CLI with the same source date and page size. Operators use the same `make ingest-api ARGS="run ..."` command that was interrupted.
 
-**Final state:** Replay verifies and reuses page 1, completes every later page, preserves original complete evidence, and emits a succeeded summary.
+**Final state:** Replay verifies and reuses page 1, completes every later page, preserves original complete evidence, publishes and verifies one aggregate, and only then emits a succeeded summary.
 
 ### `file-same-name`
 
@@ -167,13 +167,13 @@ make demo-recovery SCENARIO=postgres-connection-drop
 make demo-recovery SCENARIO=s3-unavailable
 ```
 
-**Trigger and expected exit:** Only the child API command receives an unreachable loopback S3 endpoint with one short attempt; Garage itself and unrelated projects remain running. The child exits runtime code `5`, which the wrapper expects.
+**Trigger and expected exit:** Only the child API command receives an unreachable loopback S3 endpoint with one short attempt; Garage itself and unrelated projects remain running. The child exits handled code `4`, which the wrapper expects. Its final two records are one failed `api_ingestion` with `error_code=storage_error` and one `run_summary` carrying the same source date, batch ID, and run ID; no duplicate `cli_error` is emitted.
 
-**Intermediate state:** The selected page pair is `absent`. Any previously recorded demo inventory is hashed before and after the failed child and must remain unchanged.
+**Intermediate state:** The selected page pair and its logical-run aggregate are `absent`, and the summary reports zero confirmed records and raw bytes. Any previously recorded demo inventory is hashed before and after the failed child and must remain unchanged. Output and demo reports contain no credentials, DSN, unreachable endpoint, backend exception text, or payload values.
 
 **Recovery or terminal action:** The parent reruns the same normal API command using the real endpoint from the ignored `.env`. In an operator incident, restore S3 and rerun the original API, file resume, or snapshot resume command with the same logical descriptor.
 
-**Final state:** Normal reconciliation creates or reuses the exact selected batch, while prior unrelated evidence remains byte-identical.
+**Final state:** Normal reconciliation creates or reuses the exact selected page evidence and publishes or reuses its aggregate, while prior unrelated evidence remains byte-identical. Separate isolated acceptance also exercises the production file and snapshot commands against the same bounded unavailable-endpoint class; each returns `4` with its own failure event (`storage_failed`) followed by one complete summary and leaves its exact target keys absent.
 
 ### `payload-before-manifest`
 
@@ -183,11 +183,11 @@ make demo-recovery SCENARIO=payload-before-manifest
 
 **Trigger and expected exit:** A private storage wrapper exits `86` immediately before the first manifest write and only after immutable raw upload and verification have returned successfully. A safely repeated completed scenario can exit `0` rather than deleting evidence to recreate the fault.
 
-**Intermediate state:** The first API page is exactly `payload_only`: verified raw bytes exist and its deterministic manifest key is absent. Later pages are absent on the first interruption.
+**Intermediate state:** The first API page is exactly `payload_only`: verified raw bytes exist and its deterministic page-manifest key is absent. Later pages and the logical-run aggregate are absent on the first interruption.
 
 **Recovery or terminal action:** The parent invokes the normal API CLI with the same source date and page size. Operators rerun the original `make ingest-api ARGS="run ..."` command; no special repair flag is needed.
 
-**Final state:** Reconciliation verifies the existing raw checksum, adds only the missing manifest, completes later pages, and leaves the raw payload unchanged.
+**Final state:** Reconciliation verifies the existing raw checksum, adds only the missing page manifest, completes later pages, publishes one aggregate last, and leaves the raw payload unchanged.
 
 ## Clean-export acceptance walkthrough
 
@@ -199,7 +199,7 @@ uv run python scripts/check_clean_export.py
 
 The harness obtains its source set from `git ls-files --cached --others --exclude-standard`; rejects `.env`, virtual environments, caches, artifacts, Git metadata, unsafe paths, and symlinks; copies only regular files to a temporary directory; and initializes a new mode-`0600` `.env` without printing credentials. It changes only allow-listed loopback ports, endpoint URLs, and a unique bucket, and passes a unique Compose project name to every Make command.
 
-Under per-command and total deadlines it runs locked dependency sync, doctor, Compose rendering, `make up`, deterministic seed, all four public demos, offline tests, and final exact inspection. It separately reports setup time, warm `demo-happy-path` time, and total walkthrough time; warm happy path must remain at or below three minutes.
+Under per-command and total deadlines it runs locked dependency sync, doctor, Compose rendering, `make up`, deterministic seed, all four public demos, offline tests, and final exact inspection. The accepted BI-092 inventory contains exactly 6 raw objects, 8 manifest objects (six one-payload manifests plus two API logical-run aggregates), 1 archive object, 2 rejected objects, and 0 landing objects. It separately reports setup time, warm `demo-happy-path` time, and total walkthrough time; warm happy path must remain at or below three minutes.
 
 Cleanup first runs normal `make down`, then calls the existing reset helper with exact `destroy-local-data` confirmation. It requires no containers, networks, or volumes with the isolated project label to remain and compares the protected default project's three volume fingerprints before and after. Generated command output plus NDJSON report/state artifacts are rejected if they contain generated credentials or supplier row values; intentionally retained bad-file input bytes are business evidence and are not misclassified as reports.
 

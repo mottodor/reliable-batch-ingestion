@@ -63,7 +63,14 @@ def _result(source_date: date) -> ApiIngestionResult:
         classification=None,
         message="API ingestion succeeded",
     )
-    return ApiIngestionResult(summary, event, (), (), ())
+    return ApiIngestionResult(
+        summary,
+        event,
+        (),
+        (),
+        "manifests/api/test/logical-run.manifest.json",
+        (),
+    )
 
 
 def _failure(source_date: date) -> ApiIngestionError:
@@ -112,17 +119,40 @@ def test_backfill_calls_single_date_primitive_for_every_inclusive_date_in_order(
     assert result.to_date == date(2026, 9, 3)
 
 
-def test_backfill_stops_at_first_failed_date_and_does_not_call_later_dates() -> None:
+def test_backfill_stops_at_storage_failure_without_duplicate_terminal_output() -> None:
     called: list[date] = []
+    emitted: list[dict[str, object]] = []
     failed_date = date(2026, 9, 2)
 
     def ingest_date(**kwargs: object) -> ApiIngestionResult:
         source_date = kwargs["source_date"]
+        event_sink = kwargs["event_sink"]
         assert isinstance(source_date, date)
+        assert callable(event_sink)
         called.append(source_date)
+        result = _result(source_date)
         if source_date == failed_date:
-            raise _failure(source_date)
-        return _result(source_date)
+            event = ApiRunEvent(
+                status=ApiRunStatus.FAILED,
+                source_date=source_date,
+                batch_id=result.summary.batch_id,
+                run_id=result.summary.run_id,
+                page=1,
+                error_code=ApiErrorCode.STORAGE_ERROR,
+                http_status=None,
+                classification=None,
+                message="storage operation failed",
+            )
+            event_sink(event.to_dict())
+            event_sink({"event": "run_summary", **result.summary.to_dict()})
+            raise ApiIngestionError(
+                code=ApiErrorCode.STORAGE_ERROR,
+                summary=result.summary,
+                event=event,
+            )
+        event_sink(result.event.to_dict())
+        event_sink({"event": "run_summary", **result.summary.to_dict()})
+        return result
 
     with (
         httpx.Client() as client,
@@ -135,11 +165,25 @@ def test_backfill_stops_at_first_failed_date_and_does_not_call_later_dates() -> 
             descriptor=get_source_descriptor("fx-rates"),
             from_date=date(2026, 9, 1),
             to_date=date(2026, 9, 3),
+            event_sink=emitted.append,
             ingest_date=ingest_date,
         )
 
+    assert captured.value.code is ApiErrorCode.STORAGE_ERROR
     assert captured.value.event.source_date == failed_date
     assert called == [date(2026, 9, 1), failed_date]
+    assert [item["event"] for item in emitted] == [
+        "api_ingestion",
+        "run_summary",
+        "api_ingestion",
+        "run_summary",
+    ]
+    assert [item.get("source_date") for item in emitted] == [
+        "2026-09-01",
+        "2026-09-01",
+        "2026-09-02",
+        "2026-09-02",
+    ]
 
 
 @pytest.mark.parametrize(

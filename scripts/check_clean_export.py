@@ -59,7 +59,7 @@ _PAYLOAD_VALUE_PATTERN = re.compile(r"SUP-[A-Za-z0-9_-]+")
 _EXPECTED_INSPECT_COUNTS = {
     "archive": 1,
     "landing": 0,
-    "manifest": 6,
+    "manifest": 8,
     "raw": 6,
     "rejected": 2,
 }

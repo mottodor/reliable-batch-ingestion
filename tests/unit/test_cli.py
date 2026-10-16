@@ -25,6 +25,7 @@ from batch_ingestion.config import (
     SnapshotConfig,
     StorageConfig,
 )
+from batch_ingestion.storage import StorageBackendError
 from batch_ingestion.summary import RunSummary
 
 
@@ -96,15 +97,19 @@ def _result(source_date: date) -> ApiIngestionResult:
         classification=None,
         message="API ingestion succeeded",
     )
-    return ApiIngestionResult(summary, event, (), (), ())
+    return ApiIngestionResult(
+        summary,
+        event,
+        (),
+        (),
+        "manifests/api/test/logical-run.manifest.json",
+        (),
+    )
 
 
-class _ClosableS3Client:
+class _SessionState:
     def __init__(self) -> None:
         self.closed = False
-
-    def close(self) -> None:
-        self.closed = True
 
 
 class _Storage:
@@ -115,14 +120,22 @@ def _patch_runtime(
     monkeypatch: pytest.MonkeyPatch,
     *,
     config: AppConfig | None = None,
-) -> tuple[list[str], _ClosableS3Client]:
+) -> tuple[list[str], _SessionState]:
     from batch_ingestion import cli
 
     lifecycle: list[str] = []
-    s3_client = _ClosableS3Client()
+    session_state = _SessionState()
     monkeypatch.setattr(cli, "load_config", lambda environ: config or _config())
-    monkeypatch.setattr(cli, "create_s3_client", lambda storage_config: s3_client)
-    monkeypatch.setattr(cli, "S3Storage", lambda **kwargs: _Storage())
+
+    @contextmanager
+    def open_storage(storage_config: StorageConfig) -> Iterator[object]:
+        del storage_config
+        lifecycle.append("storage_open")
+        try:
+            yield _Storage()
+        finally:
+            session_state.closed = True
+            lifecycle.append("storage_close")
 
     @contextmanager
     def open_client(http_config: HttpConfig) -> Iterator[object]:
@@ -132,8 +145,9 @@ def _patch_runtime(
         finally:
             lifecycle.append("http_close")
 
+    monkeypatch.setattr(cli, "storage_session", open_storage)
     monkeypatch.setattr(cli, "open_http_client", open_client)
-    return lifecycle, s3_client
+    return lifecycle, session_state
 
 
 def _json_lines(captured: str) -> list[dict[str, object]]:
@@ -146,11 +160,13 @@ def test_run_command_uses_allow_list_emits_json_and_closes_both_clients(
 ) -> None:
     from batch_ingestion import cli
 
-    lifecycle, s3_client = _patch_runtime(monkeypatch)
+    lifecycle, session_state = _patch_runtime(monkeypatch)
     observed: dict[str, object] = {}
 
     def ingest_date(**kwargs: Any) -> ApiIngestionResult:
         observed.update(kwargs)
+        with kwargs["storage_session_provider"]():
+            pass
         source_date = kwargs["source_date"]
         assert isinstance(source_date, date)
         result = _result(source_date)
@@ -167,8 +183,8 @@ def test_run_command_uses_allow_list_emits_json_and_closes_both_clients(
     descriptor = observed["descriptor"]
     assert isinstance(descriptor, ApiSourceDescriptor)
     assert descriptor.name == "fx-rates"
-    assert lifecycle == ["http_open", "http_close"]
-    assert s3_client.closed is True
+    assert lifecycle == ["http_open", "storage_open", "storage_close", "http_close"]
+    assert session_state.closed is True
     assert [item["event"] for item in _json_lines(capsys.readouterr().out)] == [
         "api_ingestion",
         "run_summary",
@@ -181,11 +197,13 @@ def test_backfill_command_passes_inclusive_range_to_service(
 ) -> None:
     from batch_ingestion import cli
 
-    lifecycle, s3_client = _patch_runtime(monkeypatch)
+    lifecycle, session_state = _patch_runtime(monkeypatch)
     observed: dict[str, object] = {}
 
     def ingest_backfill(**kwargs: Any) -> object:
         observed.update(kwargs)
+        with kwargs["storage_session_provider"]():
+            pass
         return object()
 
     monkeypatch.setattr(cli, "ingest_api_backfill", ingest_backfill)
@@ -209,8 +227,8 @@ def test_backfill_command_passes_inclusive_range_to_service(
     descriptor = observed["descriptor"]
     assert isinstance(descriptor, ApiSourceDescriptor)
     assert descriptor.name == "shipping-statuses"
-    assert lifecycle == ["http_open", "http_close"]
-    assert s3_client.closed is True
+    assert lifecycle == ["http_open", "storage_open", "storage_close", "http_close"]
+    assert session_state.closed is True
     assert _json_lines(capsys.readouterr().out) == [
         {
             "event": "api_backfill",
@@ -255,7 +273,7 @@ def test_maximum_range_is_rejected_before_opening_clients(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    lifecycle, s3_client = _patch_runtime(monkeypatch, config=_config(max_backfill_days=2))
+    lifecycle, session_state = _patch_runtime(monkeypatch, config=_config(max_backfill_days=2))
 
     exit_code = main(
         [
@@ -272,7 +290,7 @@ def test_maximum_range_is_rejected_before_opening_clients(
 
     assert exit_code == CliExitCode.USAGE
     assert lifecycle == []
-    assert s3_client.closed is False
+    assert session_state.closed is False
     assert _json_lines(capsys.readouterr().out)[0]["error_code"] == "invalid_arguments"
 
 
@@ -301,7 +319,7 @@ def test_configuration_failure_has_stable_exit_and_does_not_print_environment_va
     assert _json_lines(output)[0]["error_code"] == "configuration_error"
 
 
-def test_runtime_setup_failure_has_stable_non_secret_exit(
+def test_storage_session_setup_failure_uses_source_terminal_pair_and_handled_exit(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -310,11 +328,53 @@ def test_runtime_setup_failure_has_stable_non_secret_exit(
     secret = "do-not-print-runtime-secret"
     monkeypatch.setattr(cli, "load_config", lambda environ: _config())
 
-    def fail_to_create(storage_config: StorageConfig) -> _ClosableS3Client:
+    @contextmanager
+    def fail_to_open(storage_config: StorageConfig) -> Iterator[object]:
         del storage_config
-        raise OSError(secret)
+        try:
+            raise OSError(secret)
+        except OSError as cause:
+            raise StorageBackendError("storage backend operation failed") from cause
+        yield object()
 
-    monkeypatch.setattr(cli, "create_s3_client", fail_to_create)
+    monkeypatch.setattr(cli, "storage_session", fail_to_open)
+
+    @contextmanager
+    def open_client(http_config: HttpConfig) -> Iterator[object]:
+        del http_config
+        yield object()
+
+    monkeypatch.setattr(cli, "open_http_client", open_client)
+
+    exit_code = main(
+        ["run", "--source", "fx-rates", "--date", "2026-09-01"],
+        environ={},
+    )
+
+    assert exit_code == CliExitCode.INGESTION_FAILED
+    output = capsys.readouterr().out
+    assert secret not in output
+    records = _json_lines(output)
+    assert [record["event"] for record in records] == ["api_ingestion", "run_summary"]
+    assert records[0]["error_code"] == "storage_error"
+
+
+def test_http_runtime_setup_failure_keeps_generic_non_secret_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from batch_ingestion import cli
+
+    secret = "do-not-print-http-runtime-secret"
+    monkeypatch.setattr(cli, "load_config", lambda environ: _config())
+
+    @contextmanager
+    def fail_to_open(http_config: HttpConfig) -> Iterator[object]:
+        del http_config
+        raise OSError(secret)
+        yield object()
+
+    monkeypatch.setattr(cli, "open_http_client", fail_to_open)
 
     exit_code = main(
         ["run", "--source", "fx-rates", "--date", "2026-09-01"],
@@ -324,7 +384,13 @@ def test_runtime_setup_failure_has_stable_non_secret_exit(
     assert exit_code == CliExitCode.RUNTIME_ERROR
     output = capsys.readouterr().out
     assert secret not in output
-    assert _json_lines(output)[0]["error_code"] == "runtime_error"
+    assert _json_lines(output) == [
+        {
+            "event": "cli_error",
+            "error_code": "runtime_error",
+            "message": "API ingestion runtime setup or cleanup failed",
+        }
+    ]
 
 
 def test_ingestion_failure_returns_stable_exit_and_closes_clients(
@@ -333,9 +399,11 @@ def test_ingestion_failure_returns_stable_exit_and_closes_clients(
 ) -> None:
     from batch_ingestion import cli
 
-    lifecycle, s3_client = _patch_runtime(monkeypatch)
+    lifecycle, session_state = _patch_runtime(monkeypatch)
 
     def fail(**kwargs: Any) -> ApiIngestionResult:
+        with kwargs["storage_session_provider"]():
+            pass
         source_date = kwargs["source_date"]
         assert isinstance(source_date, date)
         result = _result(source_date)
@@ -363,8 +431,8 @@ def test_ingestion_failure_returns_stable_exit_and_closes_clients(
     exit_code = main(["run", "--source", "fx-rates", "--date", "2026-09-01"], environ={})
 
     assert exit_code == CliExitCode.INGESTION_FAILED
-    assert lifecycle == ["http_open", "http_close"]
-    assert s3_client.closed is True
+    assert lifecycle == ["http_open", "storage_open", "storage_close", "http_close"]
+    assert session_state.closed is True
     assert [item["event"] for item in _json_lines(capsys.readouterr().out)] == [
         "api_ingestion",
         "run_summary",

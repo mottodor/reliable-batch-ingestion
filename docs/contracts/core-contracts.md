@@ -59,7 +59,9 @@ Identical canonical identity plus identical normalized payload name yields the s
 
 ## Manifest schema version 1
 
-Manifest cardinality is exactly one manifest per immutable raw payload object. Multiple page or snapshot-chunk manifests may share a logical `batch_id`; each physical attempt records its own `run_id` and positive `attempt`. The manifest's `object_key` points to that one raw payload, and `manifest_key_for(object_key)` gives its metadata location. A complete paginated API run is represented by the complete manifest set sharing `batch_id` and `run_id`, together with its final `RunSummary`; schema version 1 does not create a second mutable aggregate manifest.
+Manifest cardinality is exactly one schema-version-1 manifest per immutable raw payload object. Multiple page or snapshot-chunk manifests may share a logical `batch_id`; each manifest retains the `run_id` and positive `attempt` of the physical attempt that completed that payload. The manifest's `object_key` points to that one raw payload, and `manifest_key_for(object_key)` gives its metadata location. The shared `Manifest`, `Manifest.from_json()`, and `manifest_key_for()` contracts never parse or derive batch-level metadata.
+
+[ADR 0003](../adr/0003-persist-rest-logical-run-manifest.md) defines one API-specific exception to payload/manifest cardinality without changing this schema: after all `N` REST page pairs are verified as succeeded, the API service persists one separate immutable `api_logical_run_manifest` at the deterministic logical-batch key. That aggregate has no synthetic raw payload, uses an independent strict schema/version and 8 MiB bound, and checksums the exact raw-page and stored page-manifest bytes. A successful REST batch therefore has `N` raw pages, `N` schema-version-1 page manifests, and one API logical-run manifest. Its exact fields, publication order, and reconciliation behavior are documented in [`api-ingestion.md`](../ingestion/api-ingestion.md).
 
 Every schema field is always present:
 
@@ -131,3 +133,20 @@ run_id
 ```
 
 Counters and duration are finite and non-negative. `source_date`, `batch_id`, and `run_id` use the same formats as the manifest. JSON is compact and key-sorted so a final summary can be emitted directly as a structured log object.
+
+## Source-attempt terminal output
+
+Once a REST date, admitted file delivery, or descriptor-backed PostgreSQL snapshot has stable `source_date`, `batch_id`, and `run_id` values, its source service owns exactly one ordered terminal pair:
+
+```text
+source terminal event
+run_summary
+```
+
+The source terminal events are `api_ingestion`, `file_ingestion`, and `snapshot_succeeded` or `snapshot_failed`. Source-specific retry/start/chunk events may precede the pair. A one-shot guard rejects duplicate terminal emission, and a handled source exception carries the event and summary already emitted so the CLI returns the handled exit without appending `cli_error` or another summary.
+
+Known backend S3 failures during source-owned session setup, exact-key inspection/read, immutable write, file copy/delete, response streaming, or client close use this same terminal path. The event and summary share the stable trace identifiers; the event exposes only a fixed source-level code, and output excludes credentials, DSNs, endpoint/backend exception text, payload values, and source rows. The original backend exception remains available only through exception chaining.
+
+Failure summaries report confirmed work only. Raw `bytes_written` increases only after a newly created canonical raw payload has been byte-verified; duplicate, accepted, page, and record counters increase only at their source-specific verified boundaries. An uncertain write does not fabricate progress. Storage/system failure output does not create a terminal failed file or snapshot manifest, or a failed REST logical-run aggregate; rerun reconciliation uses the retained deterministic evidence.
+
+Failures before stable attempt identity remain outside this claim: examples are CLI usage/configuration errors, file local-admission errors, and PostgreSQL failures before snapshot descriptor capture. Their source-specific documents define the corresponding CLI output and exit.
