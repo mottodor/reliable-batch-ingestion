@@ -42,13 +42,30 @@ class SnapshotErrorCode(StrEnum):
 
 
 class SnapshotHandledError(RuntimeError):
-    """Handled snapshot failure that exposes only its stable machine code."""
+    """Handled snapshot failure with optional source-owned terminal output."""
 
     def __init__(self, code: SnapshotErrorCode) -> None:
         if not isinstance(code, SnapshotErrorCode):
             raise TypeError("code must be a SnapshotErrorCode")
         self.code = code
+        self.event: SnapshotEvent | None = None
+        self.summary: RunSummary | None = None
         super().__init__(code.value)
+
+    def attach_terminal(self, event: SnapshotEvent, summary: RunSummary) -> None:
+        """Record the exact terminal pair emitted by the source service."""
+        if self.event is not None or self.summary is not None:
+            raise RuntimeError("snapshot terminal output is already attached")
+        if event.event_type is not SnapshotEventType.FAILED or event.error_code is not self.code:
+            raise ValueError("terminal event must be a matching snapshot failure")
+        if (
+            summary.source_date != event.descriptor.source_date
+            or summary.batch_id != event.batch_id
+            or summary.run_id != event.run_id
+        ):
+            raise ValueError("terminal summary identifiers must match the snapshot event")
+        self.event = event
+        self.summary = summary
 
 
 @dataclass(frozen=True, slots=True)

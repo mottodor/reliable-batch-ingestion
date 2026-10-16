@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-091
+active_task_id: BI-094
 
 status_values:
   - todo
@@ -237,43 +237,56 @@ tasks:
 
   - id: BI-091
     title: Decide the REST logical-run manifest contract
-    status: todo
+    status: done
     depends_on: [BI-090]
     scope:
       - Resolve BI-090-F02 with an ADR before any implementation changes.
-      - Define aggregate REST logical-run manifest cardinality, deterministic identity and key placement, linkage to page manifests, terminal states, reconciliation, and replay semantics.
-      - Preserve immutable page payloads/manifests and the sequential-writer limitation; do not implement the selected contract in this task.
+      - Compare page-set summaries, changed page manifests, synthetic payloads, per-attempt aggregates, and one deterministic API-specific aggregate against immutability and replay requirements.
+      - Define aggregate REST logical-run manifest cardinality, deterministic identity and key placement, strict bounded schema/versioning, exact page linkage, completion publication order, terminal states, reconciliation, and replay semantics.
+      - Preserve immutable page payloads/manifests and the sequential-writer limitation; do not implement, migrate, test, or write the selected runtime contract in this task.
     acceptance:
       - An accepted ADR explicitly resolves the specification requirement for a complete logical-run manifest and compares bounded alternatives.
-      - The decision defines deterministic keys, schema/version strategy, page linkage, completion criteria, failure/recovery states, and compatibility with existing page evidence.
-      - BI-092 is refined against the accepted decision without changing runtime behavior, tests, dependencies, or existing stored evidence in BI-091.
+      - The decision defines the exact deterministic key, aggregate cardinality and fields, independent schema/version strategy, canonical serialization and byte bound, page linkage, and completion criteria.
+      - The decision defines absent, incomplete, complete, corrupt/conflicting, orphaned, and uncertain-write behavior plus replay compatibility with existing page evidence and mixed page run IDs.
+      - The decision preserves schema-version-1 page manifests, raw bytes, standard-S3 access, sequential-writer semantics, and the prohibition on exactly-once claims.
+      - BI-092 is refined against the accepted decision without changing runtime behavior, tests, dependencies, current-behavior documentation claims, or existing stored evidence in BI-091.
 
   - id: BI-092
     title: Persist and reconcile REST logical-run manifests
-    status: todo
+    status: done
     depends_on: [BI-091]
     scope:
-      - Implement the aggregate REST logical-run manifest contract accepted by BI-091.
-      - Add restart-safe reconciliation after all page evidence is complete without rewriting existing immutable page payloads or manifests.
-      - Update focused tests and operator documentation for success, partial runs, replay, backfill, and conflicts.
+      - Implement the separate strict api_logical_run_manifest schema version 1, canonical serializer/parser, deterministic logical-run key helper, and 8 MiB declared/actual byte bounds accepted in ADR 0003.
+      - Add bounded exact-key inspection that streams and verifies aggregate, raw-page, and page-manifest bytes and checksums without treating ETag or prefix listing as completeness evidence.
+      - Publish exactly one immutable success-only aggregate after every required schema-version-1 page pair satisfies the completion predicate and before the terminal success event and final RunSummary.
+      - Reconcile absent, incomplete, failed, eligible, complete, corrupt, conflicting, orphaned, and uncertain-write states without rewriting or deleting retained evidence.
+      - Upgrade legacy page-only batches during normal replay, support mixed page-manifest run IDs, and keep backfill on the same fail-fast single-date primitive.
+      - Update focused unit and Garage integration tests, exact inventory/demo inspection, REST/backfill operator documentation, and compatibility wording without changing existing metric meanings or delivery claims.
     acceptance:
-      - A successful logical REST run leaves one deterministic aggregate manifest linked to the exact page evidence required by the accepted ADR.
-      - Partial runs never claim completion; rerun converges to one aggregate manifest without duplicate raw pages or mutation of prior page evidence.
-      - Unit and Garage integration tests cover absent, complete, replay, conflict, and interrupted aggregate-manifest states.
-      - API/backfill documentation and exact inventory inspection describe and validate the new manifest state without claiming exactly-once delivery.
+      - The aggregate model and key helper enforce the exact ADR 0003 fields, identity rederivation, key examples, canonical bytes, duplicate-key rejection, ordered gap-free page linkage, count relationships, 9,999-page maximum, and separate 8 MiB declared/actual read limit.
+      - A successful logical REST run leaves exactly N immutable raw pages, N unchanged schema-version-1 page manifests, and one verified aggregate at the deterministic logical-batch key; aggregate verification precedes terminal success output.
+      - Partial, interrupted, and failed runs never publish completion; an eligible or legacy page-only run converges to one aggregate without duplicating or mutating existing raw pages or page manifests.
+      - Complete replay, including mixed page-manifest run IDs, validates and reuses the original aggregate bytes, completion_run_id, and completed_at while preserving raw-only bytes_written and existing duplicate_count meanings.
+      - Every ADR 0003 reconciliation state has a stable tested outcome; corrupt, conflicting, or orphaned aggregates fail visibly and remain unchanged, while uncertain writes reuse fully valid bytes or retry the same frozen bytes only when the key is absent.
+      - Checksums for raw payloads, exact stored page-manifest bytes, and aggregate bytes come from streamed content rather than ETag, and reconciliation depends only on exact derived keys.
+      - Unit tests cover strict schema/type/version validation, noncanonical and duplicate JSON members, identity/key derivation, serialization, page ordering/linkage, count/boundary relationships, byte limits, maximum cardinality, publication order, and every reconciliation row.
+      - Garage integration covers first creation, complete replay, interruption after the final page manifest, uncertain-write recovery, malformed/conflicting/orphaned aggregate states, legacy page-only upgrade, and mixed-run page evidence without rewriting prior bytes.
+      - Each successful backfill date and exact inventory/demo inspection requires one valid aggregate, and API/backfill documentation describes recovery and compatibility using standard-S3, sequential-writer, idempotent-redelivery semantics without an exactly-once claim.
 
   - id: BI-093
     title: Emit terminal summaries for backend storage failures
-    status: todo
-    depends_on: [BI-090]
+    status: done
+    depends_on: [BI-092]
     scope:
-      - Resolve BI-090-F03 by normalizing backend S3 failures at the REST, file, and PostgreSQL snapshot service boundaries.
-      - Emit exactly one source terminal failure event and final RunSummary for attempted ingestions while preserving exception chaining and stable CLI exits.
-      - Add focused offline and isolated unavailable-S3 coverage without swallowing backend exceptions or exposing secret values.
+      - Resolve BI-090-F03 by translating raw Botocore failures at the shared storage boundary and normalizing them at the REST, file, and PostgreSQL snapshot service attempt boundaries.
+      - Bring S3 session setup and file landing staging inside source-owned attempts so stable trace identifiers exist before backend work and exactly one source terminal failure event plus final RunSummary is emitted.
+      - Preserve exception chaining, confirmed-only metrics, stable CLI exit categories, and all existing retained-evidence and recovery semantics.
+      - Add focused offline and isolated unavailable-S3 coverage without swallowing programming errors, duplicating terminal output, or exposing secret/backend values.
     acceptance:
-      - S3 setup, inspection, read, and write failures in each source path emit one terminal event and one final summary with all required metrics and stable trace identifiers.
-      - Events and summaries contain no credentials, DSNs, payload values, raw backend exception text, or duplicate terminal records.
-      - Existing retained evidence and retry/recovery semantics remain unchanged, and focused unit plus local integration tests pass.
+      - S3 session setup, inspection, read, copy, delete, and write failures in each source path emit one terminal event and one final summary with all required metrics and stable trace identifiers.
+      - Events, summaries, CLI output, and demo reports contain no credentials, DSNs, payload or row values, endpoint/backend exception text, or duplicate terminal records.
+      - Handled source exceptions preserve the backend failure as a chained cause; unexpected non-storage defects retain their runtime classification.
+      - Existing retained evidence, object/manifest contracts, bounded retries, and retry/recovery semantics remain unchanged, and focused unit plus isolated local integration tests pass.
 
   - id: BI-094
     title: Enforce the REST total response deadline

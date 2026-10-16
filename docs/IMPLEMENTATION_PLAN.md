@@ -154,6 +154,43 @@ Detailed execution plan: [`docs/plans/BI-090.md`](plans/BI-090.md).
 
 Outcome: the completed core has an independent, reproducible acceptance record without mixing audit and implementation work.
 
+## Maintenance — REST logical-run manifest decision (`BI-091`)
+
+Detailed execution plan: [`docs/plans/BI-091.md`](plans/BI-091.md).
+
+- resolve `BI-090-F02` through an accepted ADR before implementation;
+- compare bounded aggregate-manifest alternatives against immutable page evidence and replay requirements;
+- define exact aggregate cardinality, deterministic key, separate bounded schema, page linkage, completion, reconciliation, and compatibility semantics;
+- preserve raw pages, schema-version-1 page manifests, standard-S3 access, and sequential-writer/no-exactly-once limitations;
+- refine BI-092 against the accepted decision without changing runtime behavior in BI-091.
+
+Outcome: BI-092 has one binding, implementation-ready aggregate logical-run manifest contract, while existing page evidence and current runtime behavior remain unchanged during the decision task.
+
+## Maintenance — REST logical-run manifest implementation (`BI-092`)
+
+Detailed execution plan: [`docs/plans/BI-092.md`](plans/BI-092.md).
+
+- implement the separate strict aggregate model, canonical parser/serializer, and deterministic batch-level key from ADR 0003;
+- verify exact raw/page-manifest/aggregate bytes under separate finite bounds and reconcile every accepted state without prefix inference;
+- publish and verify one immutable success-only aggregate after all page evidence and before terminal success output;
+- converge legacy page-only and uncertain-write recovery while preserving mixed page runs, existing bytes, and metric meanings;
+- require the aggregate in successful backfill dates, Garage coverage, exact demo inventory, and operator documentation.
+
+Outcome: every successful REST logical batch has one durable, verified completion record while page evidence and honest sequential-redelivery semantics remain unchanged.
+
+## Maintenance — backend-storage terminal output (`BI-093`)
+
+Detailed execution plan: [`docs/plans/BI-093.md`](plans/BI-093.md).
+
+- translate raw Botocore request failures once at the shared storage boundary while preserving cause chains and existing missing/conflict/verification classifications;
+- own S3 session setup and final output inside each source attempt after stable trace identifiers exist;
+- emit exactly one source terminal failure event followed by exactly one final `RunSummary` for REST, file, and snapshot backend failures;
+- move file landing staging under the same attempt boundary without changing raw-before-validation or whole-file semantics;
+- retain confirmed-only counters, stable handled exits, existing object evidence, bounded retries, and normal reconciliation/recovery;
+- prove setup/inspection/read/copy/delete/write failures offline and exercise an isolated unreachable endpoint for all three sources.
+
+Outcome: temporary S3 failure remains bounded and restart-safe while every attempted source ingestion retains complete, secret-free terminal observability.
+
 ## Common quality gates
 
 For every gate:

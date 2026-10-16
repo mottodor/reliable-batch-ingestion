@@ -140,18 +140,12 @@ def _run_file_move(config: AppConfig) -> int:
         )
         with contextlib.closing(raw_client):
             storage = S3Storage(client=cast(Any, proxy), bucket=config.storage.bucket)
-            local_file.stream.seek(0)
-            storage.write_immutable(
-                delivery.landing_key,
-                local_file.stream,
-                content_length=local_file.content_length,
-                checksum_sha256=delivery.actual_sha256,
-                content_type=delivery.content_type,
-            )
             ingest_file_delivery(
                 storage=storage,
                 config=config.file,
                 delivery=delivery,
+                landing_stream=local_file.stream,
+                landing_content_length=local_file.content_length,
                 event_sink=_emit,
             )
     return 0

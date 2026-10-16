@@ -142,7 +142,7 @@ def test_public_demo_targets_create_replay_retry_reject_and_inspect_exact_invent
     assert duplicate_summary["object_counts"] == {
         "archive": 1,
         "landing": 0,
-        "manifest": 5,
+        "manifest": 6,
         "raw": 5,
         "rejected": 0,
     }
@@ -164,7 +164,7 @@ def test_public_demo_targets_create_replay_retry_reject_and_inspect_exact_invent
     assert inspect_summary["object_counts"] == {
         "archive": 1,
         "landing": 0,
-        "manifest": 8,
+        "manifest": 10,
         "raw": 8,
         "rejected": 2,
     }

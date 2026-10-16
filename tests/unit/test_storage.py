@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from typing import BinaryIO, Protocol, cast
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 from mypy_boto3_s3 import S3Client
 
 import batch_ingestion.storage as storage_module
@@ -22,7 +22,9 @@ from batch_ingestion.storage import (
     ObjectVerificationError,
     ReconciliationState,
     S3Storage,
+    StorageBackendError,
     create_s3_client,
+    storage_session,
 )
 
 PAYLOAD = b'{"rates":[1,2,3]}\n'
@@ -48,12 +50,20 @@ class _InspectableConfig(Protocol):
 
 
 class _TrackingBody(io.BytesIO):
-    def __init__(self, value: bytes) -> None:
+    def __init__(
+        self,
+        value: bytes,
+        *,
+        read_error: EndpointConnectionError | None = None,
+    ) -> None:
         super().__init__(value)
         self.read_sizes: list[int] = []
+        self.read_error = read_error
 
     def read(self, size: int | None = -1) -> bytes:
         self.read_sizes.append(-1 if size is None else size)
+        if self.read_error is not None:
+            raise self.read_error
         return super().read(size)
 
 
@@ -63,13 +73,19 @@ class FakeS3Client:
         self.put_count = 0
         self.copy_count = 0
         self.delete_count = 0
-        self.get_errors: dict[str, ClientError] = {}
+        self.get_errors: dict[str, ClientError | EndpointConnectionError] = {}
+        self.put_error: ClientError | EndpointConnectionError | None = None
+        self.copy_error: ClientError | EndpointConnectionError | None = None
+        self.delete_error: ClientError | EndpointConnectionError | None = None
+        self.close_error: ClientError | EndpointConnectionError | None = None
         self.fail_copy = False
         self.fail_delete = False
+        self.closed = False
         self.corrupt_copy = False
         self.keep_source_on_delete = False
         self.last_body: _TrackingBody | None = None
         self.declared_lengths: dict[str, int] = {}
+        self.read_errors: dict[str, EndpointConnectionError] = {}
 
     def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
         assert Bucket == BUCKET
@@ -78,7 +94,7 @@ class FakeS3Client:
         stored = self.objects.get(Key)
         if stored is None:
             raise _client_error("NoSuchKey", 404, "GetObject")
-        body = _TrackingBody(stored.body)
+        body = _TrackingBody(stored.body, read_error=self.read_errors.get(Key))
         self.last_body = body
         return {
             "Body": body,
@@ -98,6 +114,8 @@ class FakeS3Client:
         Metadata: Mapping[str, str],
     ) -> dict[str, object]:
         assert Bucket == BUCKET
+        if self.put_error is not None:
+            raise self.put_error
         body = Body.read()
         assert len(body) == ContentLength
         self.put_count += 1
@@ -115,6 +133,8 @@ class FakeS3Client:
         assert Bucket == BUCKET
         assert CopySource["Bucket"] == BUCKET
         assert MetadataDirective == "COPY"
+        if self.copy_error is not None:
+            raise self.copy_error
         if self.fail_copy:
             raise _client_error("ServiceUnavailable", 503, "CopyObject")
         source = self.objects[CopySource["Key"]]
@@ -125,12 +145,19 @@ class FakeS3Client:
 
     def delete_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
         assert Bucket == BUCKET
+        if self.delete_error is not None:
+            raise self.delete_error
         if self.fail_delete:
             raise _client_error("ServiceUnavailable", 503, "DeleteObject")
         self.delete_count += 1
         if not self.keep_source_on_delete:
             self.objects.pop(Key, None)
         return {}
+
+    def close(self) -> None:
+        self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
 
 
 def _client_error(code: str, status: int, operation: str) -> ClientError:
@@ -290,6 +317,43 @@ def test_bounded_download_closes_body_and_spool_on_size_failure(
     assert spools[0].closed is True
 
 
+def test_bounded_download_translates_stream_failure_and_closes_body_and_spool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeS3Client()
+    spools: list[io.BytesIO] = []
+
+    def tracking_spool(*, max_size: int, mode: str) -> io.BytesIO:
+        assert max_size == 4
+        assert mode == "w+b"
+        spool = io.BytesIO()
+        spools.append(spool)
+        return spool
+
+    monkeypatch.setattr(storage_module, "SpooledTemporaryFile", tracking_spool)
+    _put_fake(fake, "landing/input.json")
+    backend_error = EndpointConnectionError(endpoint_url="http://backend-secret.invalid")
+    fake.read_errors["landing/input.json"] = backend_error
+
+    with (
+        pytest.raises(StorageBackendError) as captured,
+        _storage(fake).download_spooled(
+            "landing/input.json",
+            maximum_bytes=len(PAYLOAD),
+            spool_threshold_bytes=4,
+            expected_checksum_sha256=PAYLOAD_SHA256,
+        ),
+    ):
+        pytest.fail("failed downloads must not yield")
+
+    assert captured.value.__cause__ is backend_error
+    assert str(captured.value) == "storage backend request failed"
+    assert fake.last_body is not None
+    assert fake.last_body.closed is True
+    assert len(spools) == 1
+    assert spools[0].closed is True
+
+
 def test_bounded_download_reports_absence_and_byte_conflicts() -> None:
     fake = FakeS3Client()
     storage = _storage(fake)
@@ -432,9 +496,10 @@ def test_immutable_write_rejects_non_seekable_stream() -> None:
 
 def test_non_missing_s3_error_is_not_classified_as_absence() -> None:
     fake = FakeS3Client()
-    fake.get_errors["raw/object.json"] = _client_error("AccessDenied", 403, "GetObject")
+    backend_error = _client_error("AccessDenied", 403, "GetObject")
+    fake.get_errors["raw/object.json"] = backend_error
 
-    with pytest.raises(ClientError) as captured:
+    with pytest.raises(StorageBackendError, match="storage backend request failed") as captured:
         _storage(fake).write_immutable(
             "raw/object.json",
             io.BytesIO(PAYLOAD),
@@ -443,8 +508,103 @@ def test_non_missing_s3_error_is_not_classified_as_absence() -> None:
             content_type="application/json",
         )
 
-    assert captured.value.response.get("Error", {}).get("Code") == "AccessDenied"
+    assert captured.value.__cause__ is backend_error
+    assert "AccessDenied" not in str(captured.value)
     assert fake.put_count == 0
+
+
+def test_backend_failures_are_translated_for_each_mutating_operation() -> None:
+    endpoint = "http://sentinel-user:sentinel-password@storage.invalid:3900"
+
+    put_client = FakeS3Client()
+    put_error = EndpointConnectionError(endpoint_url=endpoint)
+    put_client.put_error = put_error
+    with pytest.raises(StorageBackendError) as put_captured:
+        _storage(put_client).write_immutable(
+            "raw/object.json",
+            io.BytesIO(PAYLOAD),
+            content_length=len(PAYLOAD),
+            checksum_sha256=PAYLOAD_SHA256,
+            content_type="application/json",
+        )
+    assert put_captured.value.__cause__ is put_error
+
+    copy_client = FakeS3Client()
+    _put_fake(copy_client, "landing/input.json")
+    copy_error = EndpointConnectionError(endpoint_url=endpoint)
+    copy_client.copy_error = copy_error
+    with pytest.raises(StorageBackendError) as copy_captured:
+        _storage(copy_client).move_verified(
+            "landing/input.json",
+            "archive/input.json",
+            content_length=len(PAYLOAD),
+            checksum_sha256=PAYLOAD_SHA256,
+        )
+    assert copy_captured.value.__cause__ is copy_error
+    assert "archive/input.json" not in copy_client.objects
+
+    delete_client = FakeS3Client()
+    _put_fake(delete_client, "landing/input.json")
+    _put_fake(delete_client, "archive/input.json")
+    delete_error = EndpointConnectionError(endpoint_url=endpoint)
+    delete_client.delete_error = delete_error
+    with pytest.raises(StorageBackendError) as delete_captured:
+        _storage(delete_client).move_verified(
+            "landing/input.json",
+            "archive/input.json",
+            content_length=len(PAYLOAD),
+            checksum_sha256=PAYLOAD_SHA256,
+        )
+    assert delete_captured.value.__cause__ is delete_error
+    assert "landing/input.json" in delete_client.objects
+    assert "archive/input.json" in delete_client.objects
+
+    for captured in (put_captured, copy_captured, delete_captured):
+        assert str(captured.value) == "storage backend request failed"
+        assert endpoint not in str(captured.value)
+
+
+def test_storage_session_translates_creation_and_close_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = StorageConfig(
+        endpoint_url="http://localhost:3900",
+        region="garage",
+        bucket=BUCKET,
+        access_key="sentinel-access-key",
+        secret_key="sentinel-secret-key",
+        addressing_style="path",
+        total_max_attempts=1,
+        connect_timeout_seconds=1,
+        read_timeout_seconds=1,
+    )
+    endpoint = "http://sentinel-user:sentinel-password@storage.invalid:3900"
+    creation_error = EndpointConnectionError(endpoint_url=endpoint)
+
+    def fail_create(*_: object, **__: object) -> object:
+        raise creation_error
+
+    monkeypatch.setattr("batch_ingestion.storage.boto3.client", fail_create)
+    with pytest.raises(StorageBackendError) as creation_captured:
+        create_s3_client(config)
+    assert creation_captured.value.__cause__ is creation_error
+
+    fake = FakeS3Client()
+    close_error = EndpointConnectionError(endpoint_url=endpoint)
+    fake.close_error = close_error
+    with (
+        pytest.raises(StorageBackendError) as close_captured,
+        storage_session(config, client_factory=lambda _: cast(S3Client, fake)) as storage,
+    ):
+        assert isinstance(storage, S3Storage)
+    assert fake.closed is True
+    assert close_captured.value.__cause__ is close_error
+
+    for captured in (creation_captured, close_captured):
+        serialized = str(captured.value)
+        assert serialized == "storage backend request failed"
+        assert endpoint not in serialized
+        assert "sentinel" not in serialized
 
 
 def test_move_copies_verifies_preserves_metadata_then_deletes() -> None:
@@ -524,7 +684,7 @@ def test_move_copy_failure_leaves_source_only() -> None:
     fake.fail_copy = True
     _put_fake(fake, "landing/input.json")
 
-    with pytest.raises(ClientError):
+    with pytest.raises(StorageBackendError) as captured:
         _storage(fake).move_verified(
             "landing/input.json",
             "archive/input.json",
@@ -532,6 +692,7 @@ def test_move_copy_failure_leaves_source_only() -> None:
             checksum_sha256=PAYLOAD_SHA256,
         )
 
+    assert isinstance(captured.value.__cause__, ClientError)
     assert "landing/input.json" in fake.objects
     assert "archive/input.json" not in fake.objects
     assert fake.delete_count == 0
@@ -559,7 +720,7 @@ def test_move_delete_failure_leaves_both_objects_for_retry() -> None:
     fake.fail_delete = True
     _put_fake(fake, "landing/input.json")
 
-    with pytest.raises(ClientError):
+    with pytest.raises(StorageBackendError) as captured:
         _storage(fake).move_verified(
             "landing/input.json",
             "archive/input.json",
@@ -567,6 +728,7 @@ def test_move_delete_failure_leaves_both_objects_for_retry() -> None:
             checksum_sha256=PAYLOAD_SHA256,
         )
 
+    assert isinstance(captured.value.__cause__, ClientError)
     assert fake.objects["landing/input.json"].body == PAYLOAD
     assert fake.objects["archive/input.json"].body == PAYLOAD
 

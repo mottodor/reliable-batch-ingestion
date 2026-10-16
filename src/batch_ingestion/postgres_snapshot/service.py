@@ -7,7 +7,7 @@ import io
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import BinaryIO, Protocol
@@ -22,9 +22,10 @@ from batch_ingestion.storage import (
     ObjectVerificationError,
     ReconciliationResult,
     ReconciliationState,
+    StorageError,
     StoredObject,
 )
-from batch_ingestion.summary import RunSummary
+from batch_ingestion.summary import RunSummary, TerminalEmitter
 
 from .contracts import PARQUET_CONTENT_TYPE, SnapshotDescriptor
 from .events import (
@@ -120,11 +121,12 @@ class _Deadline:
 
 def ingest_order_snapshot(
     *,
-    storage: SnapshotStorage,
     postgres_config: PostgresConfig,
     snapshot_config: SnapshotConfig,
     source_name: str,
     source_date: date,
+    storage: SnapshotStorage | None = None,
+    storage_session_provider: (Callable[[], AbstractContextManager[SnapshotStorage]] | None) = None,
     resume_descriptor: SnapshotDescriptor | None = None,
     monotonic: Callable[[], float] = time.monotonic,
     utc_now: Callable[[], datetime] | None = None,
@@ -135,12 +137,13 @@ def ingest_order_snapshot(
     ),
     event_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> SnapshotIngestionResult:
-    """Capture or resume one bounded snapshot and commit each chunk raw-first."""
+    """Capture a descriptor, own storage, and commit each bounded chunk raw-first."""
     started_at = monotonic()
     deadline = _Deadline(monotonic, started_at, snapshot_config.max_elapsed_seconds)
     run_id = run_id_factory()
     wall_clock = utc_now or _utc_now
     counters = _MutableCounters()
+    terminal = TerminalEmitter(event_sink)
     descriptor: SnapshotDescriptor | None = None
     batch_id: str | None = None
 
@@ -177,61 +180,74 @@ def ingest_order_snapshot(
 
             produced_chunks = 0
             final_watermark: tuple[datetime, int] | None = None
-            for chunk_ordinal, rows in enumerate(snapshot.iter_chunks(), start=1):
-                deadline.check()
-                counters.records_read += len(rows)
-                if chunk_ordinal > expected_chunks:
-                    raise SnapshotHandledError(SnapshotErrorCode.SOURCE_SNAPSHOT_CHANGED)
+            try:
+                with _snapshot_storage_context(
+                    storage=storage,
+                    storage_session_provider=storage_session_provider,
+                ) as active_storage:
+                    for chunk_ordinal, rows in enumerate(snapshot.iter_chunks(), start=1):
+                        deadline.check()
+                        counters.records_read += len(rows)
+                        if chunk_ordinal > expected_chunks:
+                            raise SnapshotHandledError(SnapshotErrorCode.SOURCE_SNAPSHOT_CHANGED)
 
-                with chunk_serializer(rows, snapshot_config=snapshot_config) as serialized:
-                    deadline.check()
-                    if serialized.record_count != len(rows):
-                        raise SnapshotHandledError(SnapshotErrorCode.SOURCE_CONTRACT_FAILED)
-                    if rows:
-                        final_row = rows[-1]
-                        if not isinstance(final_row, SnapshotOrderRow):
-                            raise SnapshotHandledError(SnapshotErrorCode.SOURCE_CONTRACT_FAILED)
-                        final_watermark = (final_row.updated_at, final_row.order_id)
-                    chunk_status = _commit_chunk(
-                        storage=storage,
-                        descriptor=descriptor,
-                        snapshot_config=snapshot_config,
-                        serialized=serialized,
-                        chunk_ordinal=chunk_ordinal,
-                        batch_id=batch_id,
-                        run_id=run_id,
-                        extracted_at=wall_clock(),
-                        counters=counters,
-                        deadline=deadline,
-                    )
-                    produced_chunks = chunk_ordinal
-                    _emit(
-                        event_sink,
-                        SnapshotEvent.chunk_completed(
-                            descriptor=descriptor,
-                            chunk_rows=snapshot_config.chunk_rows,
-                            batch_id=batch_id,
-                            run_id=run_id,
-                            chunk_ordinal=chunk_ordinal,
-                            object_key=descriptor.raw_key(
+                        with chunk_serializer(
+                            rows,
+                            snapshot_config=snapshot_config,
+                        ) as serialized:
+                            deadline.check()
+                            if serialized.record_count != len(rows):
+                                raise SnapshotHandledError(SnapshotErrorCode.SOURCE_CONTRACT_FAILED)
+                            if rows:
+                                final_row = rows[-1]
+                                if not isinstance(final_row, SnapshotOrderRow):
+                                    raise SnapshotHandledError(
+                                        SnapshotErrorCode.SOURCE_CONTRACT_FAILED
+                                    )
+                                final_watermark = (final_row.updated_at, final_row.order_id)
+                            chunk_status = _commit_chunk(
+                                storage=active_storage,
+                                descriptor=descriptor,
+                                snapshot_config=snapshot_config,
+                                serialized=serialized,
                                 chunk_ordinal=chunk_ordinal,
-                                chunk_rows=snapshot_config.chunk_rows,
-                            ),
-                            chunk_status=chunk_status,
-                            records=serialized.record_count,
-                            content_length=serialized.content_length,
-                        ),
-                    )
-                deadline.check()
+                                batch_id=batch_id,
+                                run_id=run_id,
+                                extracted_at=wall_clock(),
+                                counters=counters,
+                                deadline=deadline,
+                            )
+                            produced_chunks = chunk_ordinal
+                            _emit(
+                                event_sink,
+                                SnapshotEvent.chunk_completed(
+                                    descriptor=descriptor,
+                                    chunk_rows=snapshot_config.chunk_rows,
+                                    batch_id=batch_id,
+                                    run_id=run_id,
+                                    chunk_ordinal=chunk_ordinal,
+                                    object_key=descriptor.raw_key(
+                                        chunk_ordinal=chunk_ordinal,
+                                        chunk_rows=snapshot_config.chunk_rows,
+                                    ),
+                                    chunk_status=chunk_status,
+                                    records=serialized.record_count,
+                                    content_length=serialized.content_length,
+                                ),
+                            )
+                        deadline.check()
 
-            deadline.check()
-            _require_final_totals(
-                descriptor=descriptor,
-                expected_chunks=expected_chunks,
-                produced_chunks=produced_chunks,
-                records_read=counters.records_read,
-                final_watermark=final_watermark,
-            )
+                    deadline.check()
+                    _require_final_totals(
+                        descriptor=descriptor,
+                        expected_chunks=expected_chunks,
+                        produced_chunks=produced_chunks,
+                        records_read=counters.records_read,
+                        final_watermark=final_watermark,
+                    )
+            except StorageError as error:
+                raise SnapshotHandledError(SnapshotErrorCode.STORAGE_FAILED) from error
+
             frozen_counters = counters.freeze()
             summary = frozen_counters.to_run_summary(
                 duration_seconds=deadline.elapsed(),
@@ -246,7 +262,7 @@ def ingest_order_snapshot(
                 run_id=run_id,
                 counters=frozen_counters,
             )
-            _emit_terminal(event_sink, succeeded, summary)
+            terminal.emit(succeeded.to_dict(), summary)
             return SnapshotIngestionResult(
                 descriptor=descriptor,
                 summary=summary,
@@ -269,8 +285,22 @@ def ingest_order_snapshot(
                 error_code=error.code,
                 counters=frozen_counters,
             )
-            _emit_terminal(event_sink, failed, summary)
+            terminal.emit(failed.to_dict(), summary)
+            error.attach_terminal(failed, summary)
         raise
+
+
+def _snapshot_storage_context(
+    *,
+    storage: SnapshotStorage | None,
+    storage_session_provider: (Callable[[], AbstractContextManager[SnapshotStorage]] | None),
+) -> AbstractContextManager[SnapshotStorage]:
+    if (storage is None) == (storage_session_provider is None):
+        raise ValueError("exactly one snapshot storage boundary must be supplied")
+    if storage_session_provider is not None:
+        return storage_session_provider()
+    assert storage is not None
+    return nullcontext(storage)
 
 
 def _commit_chunk(
@@ -384,7 +414,7 @@ def _reconcile(
         raise SnapshotHandledError(SnapshotErrorCode.OBJECT_CONFLICT) from error
     except ObjectVerificationError as error:
         raise SnapshotHandledError(SnapshotErrorCode.RECONCILIATION_FAILED) from error
-    except Exception as error:
+    except StorageError as error:
         raise SnapshotHandledError(SnapshotErrorCode.STORAGE_FAILED) from error
 
 
@@ -407,7 +437,7 @@ def _write_immutable(
         )
     except ObjectConflictError as error:
         raise SnapshotHandledError(SnapshotErrorCode.OBJECT_CONFLICT) from error
-    except Exception as error:
+    except StorageError as error:
         raise SnapshotHandledError(SnapshotErrorCode.STORAGE_FAILED) from error
 
 
@@ -521,16 +551,6 @@ def _emit(
 ) -> None:
     if event_sink is not None:
         event_sink(event.to_dict())
-
-
-def _emit_terminal(
-    event_sink: Callable[[dict[str, object]], None] | None,
-    event: SnapshotEvent,
-    summary: RunSummary,
-) -> None:
-    _emit(event_sink, event)
-    if event_sink is not None:
-        event_sink({"event": "run_summary", **summary.to_dict()})
 
 
 def _utc_now() -> datetime:

@@ -1,6 +1,6 @@
 # PostgreSQL snapshot ingestion contract
 
-This document describes the implemented `BI-070` behavior for bounded, restart-safe daily extraction of `omni_retail.orders` into deterministic Parquet chunks. The identifier, manifest, summary, source, and shared S3 rules remain governed by [`core-contracts.md`](../contracts/core-contracts.md), [`source-contracts.md`](../contracts/source-contracts.md), and [`storage-contract.md`](../contracts/storage-contract.md).
+This document describes the implemented `BI-070` behavior for bounded, restart-safe daily extraction of `omni_retail.orders` into deterministic Parquet chunks, including the descriptor-backed storage failure boundary added by `BI-093`. The identifier, manifest, summary, source, and shared S3 rules remain governed by [`core-contracts.md`](../contracts/core-contracts.md), [`source-contracts.md`](../contracts/source-contracts.md), and [`storage-contract.md`](../contracts/storage-contract.md).
 
 The delivery claim is limited to a consistent PostgreSQL transaction while its connection remains alive, deterministic keys, immutable/idempotent chunk writes, and safe sequential replay from the fixed logical bounds. It is not an exactly-once claim. A PostgreSQL MVCC snapshot does not survive a dead connection, and concurrent writers for the same logical snapshot are unsupported.
 
@@ -128,7 +128,7 @@ There is no PostgreSQL retry loop and no snapshot-specific S3 retry loop. A new 
 
 ## Persistence order and manifests
 
-After descriptor capture or validation, the service emits `snapshot_started` before any S3 mutation. It then processes each expected chunk in order:
+After descriptor capture or validation, the service derives `batch_id`, emits `snapshot_started`, and only then opens its context-owned S3 session. Session setup, chunk reconciliation/writes, and client close are inside that descriptor-backed attempt; terminal success is emitted only after clean session exit. It then processes each expected chunk in order:
 
 1. fetch and validate no more than `SNAPSHOT_CHUNK_ROWS` rows;
 2. serialize only that chunk and calculate exact byte length and SHA-256 from the spool;
@@ -173,9 +173,9 @@ A failure before `snapshot_started` has no reusable captured descriptor and crea
 
 ## Structured output, metrics, errors, and exits
 
-Output is compact newline-delimited JSON. A normal attempt emits `snapshot_started`, one `snapshot_chunk_completed` per reconciled chunk, `snapshot_succeeded`, and `run_summary`. A handled failure after descriptor capture emits `snapshot_failed` and `run_summary`; a handled failure before descriptor capture is represented by a secret-free `cli_error` because no valid batch ID exists yet.
+Output is compact newline-delimited JSON. A normal attempt emits `snapshot_started`, one `snapshot_chunk_completed` per reconciled chunk, `snapshot_succeeded`, and `run_summary`. A handled failure after descriptor capture emits exactly one `snapshot_failed` followed by exactly one `run_summary`; `snapshot_started` and completed-chunk events may precede that pair. A handled failure before descriptor capture is represented by a secret-free `cli_error` because no valid `batch_id` exists yet.
 
-Events may contain the public descriptor, source/date, batch/run IDs, chunk ordinal/key/status, safe counters, and stable error code. They never contain the PostgreSQL DSN/password, SQL exception text, row values, credentials, or query text.
+Known backend failures from S3 session setup/close, exact reconciliation/read, raw write, or manifest write map to `storage_failed` and handled exit `4`. The failure event and summary use the captured descriptor's same source date, batch ID, and current run ID. The typed handled exception records the already emitted terminal pair, so the CLI does not append another event. Events never contain the PostgreSQL DSN/password, SQL or backend exception text, endpoint, row/payload values, credentials, or query text; the original storage failure remains only as a chained cause.
 
 Handled snapshot error codes are:
 
@@ -204,6 +204,8 @@ Snapshot `RunSummary` fields mean:
 | `duration_seconds` | Monotonic elapsed time for the physical attempt |
 | `source_date`, `batch_id`, `run_id` | Logical-date/batch and physical-attempt trace identifiers |
 
+Storage-failure counters stop at confirmed boundaries. `records_read` may include a chunk already fetched before its commit fails; `records_accepted`, `duplicate_count`, and raw `bytes_written` increase only after their existing reconciliation/verification points. An uncertain or failed write is not counted as confirmed progress.
+
 CLI exits are stable:
 
 | Exit | Meaning |
@@ -212,14 +214,14 @@ CLI exits are stable:
 | `2` | Invalid command, source/date/descriptor, or configured-bound violation before client work |
 | `3` | Invalid or missing runtime configuration |
 | `4` | Handled source drift, PostgreSQL, serialization, reconciliation, conflict, deadline, or storage failure |
-| `5` | Unexpected S3 client setup, runtime, or cleanup failure |
+| `5` | Unexpected non-storage runtime or cleanup failure outside the descriptor-backed handled path |
 
 ## Failure exercises and recovery commands
 
 | Failure | Expected retained state | Recovery command/action |
 | --- | --- | --- |
 | PostgreSQL connection interruption after a complete chunk | Earlier raw/manifest pairs remain complete and unchanged; no mutable checkpoint or fabricated failed manifest | Restore PostgreSQL, then run `make ingest-postgres ARGS="resume ..."` with every field from `snapshot_started` |
-| S3 temporarily unavailable after a fetch | Any earlier complete chunks remain; the current chunk is absent or `payload_only`; command ends within bounded settings | Restore S3 and run the same exact `resume`; replay begins at chunk 1 |
+| S3 temporarily unavailable during session setup, reconciliation/read, raw/manifest write, or close | Any earlier complete chunks remain; the current chunk is absent or `payload_only`; output ends with `snapshot_failed`/`storage_failed` then `run_summary`, exit `4` | Restore S3 and run the same exact `resume`; replay begins at chunk 1 |
 | Stop after raw upload/before manifest | Exact verified raw Parquet remains as `payload_only`; manifest is absent | Run the same `resume`; it verifies bytes and writes only the missing manifest |
 | Source changes at/below the captured upper tuple | Existing object evidence remains unchanged; resume reports `source_snapshot_changed` or an immutable conflict | Restore the exact bounded source for recovery, or retain old evidence and perform a reviewed fresh `run`; never overwrite old keys |
 | Row inserted above the upper tuple | Original batch remains bounded to its descriptor and excludes the row | Finish the original `resume`; capture later work with a fresh `run` |

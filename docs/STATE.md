@@ -1,14 +1,14 @@
 # Project state
 
-Updated: 2026-10-15
+Updated: 2026-10-16
 
 ## Current stage
 
-The core lab through BI-080 remains implemented, but BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and five requirement-specific findings remain actionable. BI-091 through BI-096 separate the ADR, repairs, and clean-commit attestation without reopening completed product tasks or adding Possible extensions. BI-091 is selected next because F02 changes manifest cardinality/key semantics and therefore requires an architectural decision before implementation.
+The core lab through BI-080 remains implemented, and BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and its findings have bounded follow-up tasks. BI-091 and BI-092 are complete: ADR 0003 now has a fully implemented, tested, and documented REST logical-run manifest contract, closing the BI-090-F02 follow-up without reopening completed product tasks or adding Possible extensions. BI-093 is complete: shared backend-error normalization and source-owned terminal boundaries now give identified REST, file, and snapshot storage failures one redacted terminal event plus one final summary, with confirmed-only counters, handled exit `4`, retained evidence, operator documentation, and isolated unavailable-S3 acceptance across all three commands. BI-094 is selected next.
 
 ```yaml
-active_task_id: BI-091
-last_completed_task_id: BI-090
+active_task_id: BI-094
+last_completed_task_id: BI-093
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -128,13 +128,44 @@ last_completed_task_id: BI-090
 - BI-090 freshly passed policy/backlog synchronization, Ruff/format/mypy, 521 offline tests, Compose rendering, the isolated clean-export walkthrough, 66 integration tests, repeat-seed marker verification, and bounded infrastructure persistence/reset recovery;
 - the clean export completed in 24.44 seconds with a 1.73-second warm happy path and exact inspected counts of 6 raw, 6 manifests, 1 archive, 2 rejected, and 0 landing objects;
 - live audit state used unique project/bucket/ports and owner-only generated credentials; cleanup removed its containers, networks, volumes, and uniquely owned images, deleted the credential file, and preserved all three default-project volume fingerprints;
-- BI-090 slice 4 finalized all five findings, closed every traceability row, created BI-091 through BI-096 as bounded follow-up, marked the audit done, and changed no product code, tests, dependency, contract, README behavior, or ADR.
+- BI-090 slice 4 finalized all five findings, closed every traceability row, created BI-091 through BI-096 as bounded follow-up, marked the audit done, and changed no product code, tests, dependency, contract, README behavior, or ADR;
+- BI-091 has an implementation-ready three-slice decision plan covering the current gap, bounded alternatives, preferred separate aggregate schema/key, exact page linkage, completion ordering, reconciliation/replay, legacy compatibility, BI-092 handoff, and a strict no-runtime-change boundary;
+- ADR 0003 accepts exactly one success-only API logical-run manifest at a deterministic batch key, with a separate strict schema version, canonical JSON, an 8 MiB bound, checksummed ordered page evidence, write-before-success ordering, exact reconciliation/replay states, legacy page-only upgrade, and unchanged page evidence and delivery limitations;
+- BI-091 refined BI-092 directly against ADR 0003, closed the decision-only task, and selected implementation next without changing Python, tests, dependencies, current-behavior documentation, README claims, or stored evidence;
+- BI-092 has an implementation-ready five-slice test-first plan covering the pure aggregate model/key/parser, exact streamed evidence, two-phase reconciliation, bounded uncertain writes, service publication ordering, legacy/mixed-run replay, Garage/backfill/demo inventory, documentation, and closeout gates;
+- BI-092 slice 1 adds frozen API aggregate/page models, exact ADR key derivation for both sources, strict identity and page-key rederivation, compact canonical UTF-8 bytes, nested duplicate-member rejection, immutable identity parameters, gap-free pagination/count checks, and the 9,999-page, 999,900-record, signed-64-bit payload-length, and separate 8 MiB aggregate bounds;
+- the pure aggregate contract has 53 focused tests, including the exact 6,098,762-byte maximum-width 9,999-page shipping manifest, while existing page-manifest schema/runtime behavior and storage contents remain unchanged;
+- BI-092 slice 2 adds API-owned exact-key reconciliation over the existing bounded storage spool, with actual-byte SHA-256 for aggregate, raw-page, and exact canonical page-manifest evidence and no ETag or prefix-list dependency;
+- absent, incomplete, failed, eligible, complete, corrupt, conflicting, orphaned, and uncertain-write outcomes are typed and covered, while present invalid completion claims remain unchanged and block publication;
+- aggregate publication now requires all candidate page evidence, freezes one canonical byte sequence, makes at most two immutable-write invocations, rewinds on retry, accepts only the same fully verified bytes after uncertainty, and retains different present bytes as conflict;
+- slice 2 changes no shared storage implementation, REST service success ordering, CLI, backfill, demo inventory, Garage evidence, or current-behavior operator documentation;
+- BI-092 slice 3 wires aggregate preflight before HTTP mutation, exact page-evidence collection after every succeeded page pair, aggregate publication/reuse, and final full reconciliation before terminal success and `RunSummary`;
+- successful results expose the verified aggregate key separately while raw-only `bytes_written`, reused-page-only `duplicate_count`, CLI arguments, and backfill delegation remain unchanged;
+- legacy page-only replay creates only the aggregate, mixed page-manifest run IDs remain byte-bound, complete replay preserves all raw/page-manifest/aggregate bytes and first-completion facts, and corrupt/conflicting/orphaned claims block fetch and mutation with stable codes;
+- aggregate publication uncertainty retains complete page evidence, emits the existing failure event/summary shapes, and never claims success;
+- BI-092 slice 4 proves first aggregate creation and byte-stable replay for both API sources against Garage, plus final-page interruption, legacy page-only upgrade, mixed-run evidence, and write-then-raise convergence through production exact-key reconciliation;
+- live malformed, noncanonical, conflicting, and orphaned aggregate claims block mutation and remain byte-stable, while repeated/resumed backfill requires one aggregate for each successful date and fails fast before later dates on aggregate conflict;
+- demo inventory now strictly parses each successful API aggregate, cross-checks its raw and page-manifest checksums against independently streamed evidence, counts it as a manifest but not raw data, and requires no aggregate for a failed API batch;
+- recovery-demo exact counts and the isolated clean-export contract include aggregate manifests; the measured clean export contains 6 raw and 8 manifest objects while preserving one archive, two rejected objects, and zero landing objects;
+- BI-092 slice 5 updates the core, REST/backfill, recovery-demo, and README contracts with exact aggregate keys, cardinality, fields/bounds, publication order, reconciliation/recovery, legacy and mixed-run replay, unchanged metrics, aggregate-required backfill/inspection, measured inventory, and honest standard-S3 sequential-redelivery semantics;
+- the complete BI-092 focused, offline, integration, infrastructure-recovery, clean-export, LSP, policy, and verification matrix passes, so BI-092 is done and BI-093 is selected;
+- BI-093 has an implementation-ready five-slice plan covering shared Botocore failure translation, source-owned S3 sessions, exact terminal cardinality, confirmed-only metrics, file staging ownership, snapshot descriptor-before-storage ordering, all backend operation classes, isolated unavailable-S3 acceptance, documentation, and closeout gates;
+- BI-093 slice 1 translates known Botocore construction/request/stream/close failures to redacted `StorageBackendError` with exact cause chaining, adds context-owned S3 sessions and one-shot terminal-pair emission, and defines a strict file `failed` event plus typed handled error without wiring any source service;
+- focused slice-1 tests preserve missing/conflict classifications, prove body/spool/client cleanup and no backend-text disclosure, reject mixed file business/system fields, and exercise the terminal guard for REST, file, and snapshot event forms;
+- BI-093 slice 2 moves REST S3 session ownership inside the stable logical attempt, delays terminal output until clean session exit, and maps setup/close plus aggregate/page inspection, read, and write backend failures to one redacted `storage_error` event followed by one final summary;
+- table-driven REST tests prove direct backend cause chaining, confirmed-only metrics, exact retained evidence at nine failure points, no success or duplicate terminal output, and fail-fast backfill without a duplicate date summary;
+- the REST CLI now delegates S3 lifecycle to the source service, returns handled exit `4` for attempted storage failures, and retains generic exit `5` for non-storage HTTP runtime setup/cleanup failures;
+- BI-093 slice 3 moves landing staging and S3-session ownership into the file-service attempt after bounded local admission, delaying terminal output until clean session exit;
+- table-driven file tests cover setup/close, staging, landing/raw download, reconciliation, inspection, raw/manifest write, and disposition copy/delete failures with one redacted `failed` event plus one final summary, direct cause chaining, confirmed-only counters, nullable pre-validation facts, and exact retained object state;
+- file storage-state conflicts now use the same typed terminal path with `storage_state_failed`, while arbitrary non-storage defects remain runtime failures and accepted/rejected/duplicate/whole-file/recovery behavior remains unchanged;
+- the file CLI delegates storage lifecycle and staging to the service, returns handled exit `4` without a duplicate `cli_error`, and the private file-move worker uses the same service-owned staging path;
+- BI-093 slice 4 captures or validates the snapshot descriptor and derives stable trace IDs before opening a service-owned S3 session, delays terminal success until session close, and attaches the emitted failure event/summary to `SnapshotHandledError`;
+- snapshot setup/close, reconciliation, raw-write, and manifest-write backend failures now emit exactly one `snapshot_failed` plus one final summary with direct cause chaining and confirmed-only counters, while descriptor failures open no S3 session and arbitrary non-storage defects retain runtime classification;
+- isolated loopback-unavailable integration proves handled exit `4`, exact terminal cardinality, redaction, bounded duration, and unchanged exact object state for REST, file, and snapshot commands; the recovery demo now requires the REST terminal pair before normal-command recovery;
+- BI-093 slice 5 documents shared and source-owned setup/operation/close failure behavior, exact terminal ordering, stable codes/exits, confirmed-only metrics, redaction, and retained-state recovery; removes the superseded backend-output limitation; and closes the task after focused, offline, integration, clean-export, LSP, policy, and verification gates pass.
 
 ## Not completed
 
-- BI-091: decide the REST aggregate logical-run manifest contract in an accepted ADR before implementation;
-- BI-092: implement and reconcile that accepted aggregate manifest contract;
-- BI-093: emit terminal events and final summaries for backend S3 failures;
 - BI-094: enforce the REST total monotonic deadline during response streaming;
 - BI-095: align local initialization/preflight with full application configuration;
 - BI-096: attest the completed source set from an exact clean committed checkout.
@@ -145,20 +176,23 @@ last_completed_task_id: BI-090
 - Concurrent ingestion writers are outside the core contract.
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
 - Ignored `.env` files created before BI-070 slice 1 must be refreshed with the committed HTTP, `FILE_*`, PostgreSQL timeout, and `SNAPSHOT_*` settings before integration targets or ingestion CLIs can load complete configuration.
-- BI-090-F01–F05 are confirmed and not repaired; the exact failed traceability rows and follow-up task mapping are authoritative in `docs/audits/BI-090.md`.
+- BI-090-F01–F05 remain the authoritative findings for the frozen audit baseline. The BI-090-F02 follow-up is resolved by accepted ADR 0003 plus completed BI-092, and the BI-090-F03 follow-up is resolved by completed BI-093. BI-094 through BI-096 remain independently actionable for F04, F05, and F01 respectively. The exact original failed traceability rows and follow-up mapping remain in `docs/audits/BI-090.md`.
 
 ## Latest validation
 
-2026-10-15, BI-090 final acceptance audit:
+2026-10-16, BI-093 slice 5 closeout:
 
-- doctor, repository policy, backlog JSON Schema/active-state validation, `git diff --check`, `make lint`, `make test` (521 passed; 66 integration deselected), and Compose rendering — PASS;
-- isolated clean export — PASS: all four public demos, exact inspection, offline tests, 1.73-second warm happy path, 24.44-second walkthrough, and internal cleanup/protected comparison;
-- isolated `make integration` — PASS: all 66 integration tests, 4 repeat-seed marker checks, and bounded persistence/destructive-reset recovery;
-- ownership-scoped cleanup, protected default-project fingerprint comparison, evidence secret/payload scan, and credential-file removal — PASS;
-- the first auxiliary post-cleanup assertion — FAIL because it assumed ownership of an unfingerprinted reusable fixed-project image; the corrected ownership-scoped check passed, and both outcomes are retained rather than hidden;
-- all requirement matrices now contain only final PASS/FAIL outcomes, and F01–F05 map to BI-091 through BI-096;
-- slice-4 backlog schema, repository policy, `git diff --check`, and final `./scripts/verify.sh` closeout results are recorded in the audit report.
+- shared/core plus REST, file, snapshot, recovery-demo, and README documentation now matches the source-owned backend-failure behavior proven in slices 1–4; the obsolete BI-093 limitation and exit-5 claims are removed;
+- focused storage/API/file/snapshot/demo unit suites — PASS: 176 tests;
+- active LSP diagnostics over all 37 changed Python paths — PASS with no findings;
+- `make lint` — PASS: Ruff, formatting, and strict mypy over 81 source files;
+- `make test` — PASS: 643 offline tests with 76 integration tests deselected;
+- Compose rendering — PASS;
+- isolated unavailable-S3 acceptance — PASS: three REST/file/snapshot command cases, handled exit `4`, exact terminal pairs, redaction, bounded duration, and unchanged exact target state;
+- `make integration` — PASS: 76 integration tests, repeat-seed verification, and infrastructure persistence/reset recovery;
+- isolated clean-export walkthrough — PASS in 26.97 seconds with a 2.04-second warm happy path, exact aggregate-aware inventory, redaction, protected-state checks, and verified cleanup;
+- `./scripts/verify.sh` — PASS: doctor, repository policy, locked dependency sync, Ruff, formatting, strict mypy, 643 offline tests with 76 integration tests deselected, and Compose rendering.
 
 ## Next atomic step
 
-Execute BI-091 only: write and accept the ADR that defines deterministic aggregate REST logical-run manifest cardinality, keys, page linkage, terminal/reconciliation states, replay, and compatibility; do not implement BI-092 behavior in the same task.
+Execute BI-094 only: add deterministic slow-trickle tests, then enforce the configured monotonic total deadline while streaming successful REST response bodies without changing retry, raw-preservation, or terminal-output contracts.

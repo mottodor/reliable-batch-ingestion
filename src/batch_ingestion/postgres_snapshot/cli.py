@@ -7,20 +7,18 @@ import json
 import re
 import sys
 from collections.abc import Mapping, Sequence
-from contextlib import closing
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date
 from enum import IntEnum
 from typing import Never, TextIO, cast
 
-from botocore.exceptions import BotoCoreError, ClientError
-
 from batch_ingestion.config import AppConfig, ConfigurationError
-from batch_ingestion.storage import S3Storage, StorageError, create_s3_client
+from batch_ingestion.storage import StorageError, storage_session
 
 from .contracts import SnapshotDescriptor, is_supported_source
 from .events import SnapshotHandledError
-from .service import ingest_order_snapshot
+from .service import SnapshotStorage, ingest_order_snapshot
 
 _CANONICAL_NON_NEGATIVE_INTEGER = re.compile(r"0|[1-9]\d*")
 _CANONICAL_SIGNED_INTEGER = re.compile(r"0|-?[1-9]\d*")
@@ -193,55 +191,37 @@ def main(
         )
         return CliExitCode.USAGE
 
+    def storage_session_provider() -> AbstractContextManager[SnapshotStorage]:
+        return storage_session(config.storage)
+
+    resume_descriptor = command.descriptor if isinstance(command, ResumeCommand) else None
     try:
-        client = create_s3_client(config.storage)
-    except (BotoCoreError, ClientError, OSError, RuntimeError):
-        _emit_error(
-            code="runtime_error",
-            message="PostgreSQL snapshot runtime setup failed",
-            output=destination,
+        ingest_order_snapshot(
+            storage_session_provider=storage_session_provider,
+            postgres_config=config.postgres,
+            snapshot_config=config.snapshot,
+            source_name=(
+                command.descriptor.source_name
+                if isinstance(command, ResumeCommand)
+                else command.source
+            ),
+            source_date=(
+                command.descriptor.source_date
+                if isinstance(command, ResumeCommand)
+                else command.source_date
+            ),
+            resume_descriptor=resume_descriptor,
+            event_sink=lambda event: _emit(event, output=destination),
         )
-        return CliExitCode.RUNTIME_ERROR
-
-    failed_event_emitted = False
-
-    def event_sink(event: dict[str, object]) -> None:
-        nonlocal failed_event_emitted
-        if event.get("event") == "snapshot_failed":
-            failed_event_emitted = True
-        _emit(event, output=destination)
-
-    try:
-        with closing(client):
-            storage = S3Storage(client=client, bucket=config.storage.bucket)
-            resume_descriptor = command.descriptor if isinstance(command, ResumeCommand) else None
-            try:
-                ingest_order_snapshot(
-                    storage=storage,
-                    postgres_config=config.postgres,
-                    snapshot_config=config.snapshot,
-                    source_name=(
-                        command.descriptor.source_name
-                        if isinstance(command, ResumeCommand)
-                        else command.source
-                    ),
-                    source_date=(
-                        command.descriptor.source_date
-                        if isinstance(command, ResumeCommand)
-                        else command.source_date
-                    ),
-                    resume_descriptor=resume_descriptor,
-                    event_sink=event_sink,
-                )
-            except SnapshotHandledError as error:
-                if not failed_event_emitted:
-                    _emit_error(
-                        code=error.code.value,
-                        message="PostgreSQL snapshot ingestion did not complete",
-                        output=destination,
-                    )
-                return CliExitCode.INGESTION_FAILED
-    except (BotoCoreError, ClientError, OSError, RuntimeError, StorageError):
+    except SnapshotHandledError as error:
+        if error.event is None or error.summary is None:
+            _emit_error(
+                code=error.code.value,
+                message="PostgreSQL snapshot ingestion did not complete",
+                output=destination,
+            )
+        return CliExitCode.INGESTION_FAILED
+    except (OSError, RuntimeError, StorageError):
         _emit_error(
             code="runtime_error",
             message="PostgreSQL snapshot runtime or cleanup failed",

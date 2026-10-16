@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -39,6 +40,7 @@ from batch_ingestion.storage import (
     ObjectVerificationError,
     ReconciliationResult,
     ReconciliationState,
+    StorageBackendError,
     StoredObject,
 )
 
@@ -87,6 +89,7 @@ class RecordingStorage:
         self.objects: dict[str, _Object] = {}
         self.fail_raw_write = False
         self.fail_manifest_write = False
+        self.backend_error: StorageBackendError | None = None
         self.reconcile_error: Exception | None = None
         self.after_reconcile: Callable[[], None] | None = None
 
@@ -141,9 +144,9 @@ class RecordingStorage:
     ) -> ImmutableWriteResult:
         self.calls.append(f"write:{key}")
         if key.startswith("raw/") and self.fail_raw_write:
-            raise RuntimeError("injected raw write failure")
+            raise self.backend_error or StorageBackendError("storage backend operation failed")
         if key.startswith("manifests/") and self.fail_manifest_write:
-            raise RuntimeError("injected manifest write failure")
+            raise self.backend_error or StorageBackendError("storage backend operation failed")
         body = stream.read()
         stream.seek(0)
         assert len(body) == content_length
@@ -296,7 +299,7 @@ def _manifest(
 
 
 def _ingest(
-    storage: RecordingStorage,
+    storage: RecordingStorage | None,
     opener: FakeSnapshotOpener,
     *,
     clock: ManualClock | None = None,
@@ -304,10 +307,14 @@ def _ingest(
     event_sink: Callable[[dict[str, object]], None] | None = None,
     serializer: Callable[..., object] = serialize_order_chunk,
     resume_descriptor: SnapshotDescriptor | None = None,
+    storage_session_provider: (
+        Callable[[], AbstractContextManager[RecordingStorage]] | None
+    ) = None,
 ) -> SnapshotIngestionResult:
     selected_clock = clock or ManualClock()
     return ingest_order_snapshot(
         storage=storage,
+        storage_session_provider=storage_session_provider,
         postgres_config=POSTGRES_CONFIG,
         snapshot_config=SNAPSHOT_CONFIG,
         source_name="orders",
@@ -374,6 +381,123 @@ def test_absent_chunks_follow_exact_commit_order_and_emit_exact_metrics() -> Non
     assert result.summary.duplicate_count == 0
     assert result.summary.run_id == RUN_ID
     assert result.event.event_type is SnapshotEventType.SUCCEEDED
+
+
+@pytest.mark.parametrize(
+    "failure_point",
+    ["setup", "reconcile", "raw_write", "manifest_write", "close"],
+)
+def test_storage_failures_emit_one_terminal_pair_after_descriptor_capture(
+    failure_point: str,
+) -> None:
+    rows = (_row(1),)
+    descriptor = _descriptor(rows)
+    calls: list[str] = []
+    storage = RecordingStorage(calls)
+    backend_error = StorageBackendError("sentinel backend endpoint and credential")
+    if failure_point == "reconcile":
+        storage.reconcile_error = backend_error
+    storage.backend_error = backend_error
+    storage.fail_raw_write = failure_point == "raw_write"
+    storage.fail_manifest_write = failure_point == "manifest_write"
+    emitted: list[dict[str, object]] = []
+
+    @contextmanager
+    def storage_session_provider() -> Iterator[RecordingStorage]:
+        calls.append("storage_setup")
+        if failure_point == "setup":
+            raise backend_error
+        yield storage
+        calls.append("storage_close")
+        if failure_point == "close":
+            raise backend_error
+
+    with pytest.raises(SnapshotHandledError) as raised:
+        _ingest(
+            None,
+            FakeSnapshotOpener(descriptor, _chunks(rows), calls),
+            event_sink=emitted.append,
+            storage_session_provider=storage_session_provider,
+        )
+
+    error = raised.value
+    assert error.code is SnapshotErrorCode.STORAGE_FAILED
+    assert error.__cause__ is backend_error
+    assert error.event is not None
+    assert error.summary is not None
+    assert calls.index("descriptor_validated") < calls.index("storage_setup")
+    assert [event["event"] for event in emitted].count("snapshot_failed") == 1
+    assert [event["event"] for event in emitted].count("run_summary") == 1
+    assert "snapshot_succeeded" not in [event["event"] for event in emitted]
+    assert emitted[-2] == error.event.to_dict()
+    assert emitted[-1] == {"event": "run_summary", **error.summary.to_dict()}
+    for event in emitted:
+        if event["event"] in {"snapshot_started", "snapshot_failed", "run_summary"}:
+            assert event["batch_id"] == descriptor.batch_id(chunk_rows=2)
+            assert event["run_id"] == RUN_ID
+
+    expected_records = 0 if failure_point == "setup" else 1
+    expected_accepted = 1 if failure_point == "close" else 0
+    raw_key = descriptor.raw_key(chunk_ordinal=1, chunk_rows=2)
+    expected_bytes = (
+        len(storage.objects[raw_key].body) if failure_point in {"manifest_write", "close"} else 0
+    )
+    assert error.summary.records_read == expected_records
+    assert error.summary.records_accepted == expected_accepted
+    assert error.summary.bytes_written == expected_bytes
+    assert (raw_key in storage.objects) is (failure_point in {"manifest_write", "close"})
+    assert (manifest_key_for(raw_key) in storage.objects) is (failure_point == "close")
+    serialized = "\n".join(json.dumps(event, sort_keys=True) for event in emitted)
+    assert "sentinel backend endpoint and credential" not in serialized
+    assert POSTGRES_CONFIG.password not in serialized
+    assert rows[0].shipping_status not in serialized
+
+
+def test_descriptor_failure_does_not_open_storage_or_invent_terminal_identity() -> None:
+    calls: list[str] = []
+    wrong_descriptor = SnapshotDescriptor.empty(
+        source_name="orders",
+        source_date=date(2026, 9, 2),
+    )
+    emitted: list[dict[str, object]] = []
+
+    @contextmanager
+    def unexpected_storage_session() -> Iterator[RecordingStorage]:
+        calls.append("storage_setup")
+        yield RecordingStorage(calls)
+
+    with pytest.raises(SnapshotHandledError) as raised:
+        _ingest(
+            None,
+            FakeSnapshotOpener(wrong_descriptor, ((),), calls),
+            event_sink=emitted.append,
+            storage_session_provider=unexpected_storage_session,
+        )
+
+    assert raised.value.code is SnapshotErrorCode.SOURCE_SNAPSHOT_CHANGED
+    assert raised.value.event is None
+    assert raised.value.summary is None
+    assert calls == ["descriptor_validated"]
+    assert emitted == []
+
+
+def test_unexpected_storage_fake_defect_is_not_reclassified() -> None:
+    rows = (_row(1),)
+    calls: list[str] = []
+    storage = RecordingStorage(calls)
+    defect = RuntimeError("programming defect")
+    storage.reconcile_error = defect
+    emitted: list[dict[str, object]] = []
+
+    with pytest.raises(RuntimeError) as raised:
+        _ingest(
+            storage,
+            FakeSnapshotOpener(_descriptor(rows), _chunks(rows), calls),
+            event_sink=emitted.append,
+        )
+
+    assert raised.value is defect
+    assert [event["event"] for event in emitted] == ["snapshot_started"]
 
 
 def test_payload_only_is_reused_and_only_missing_manifest_is_created() -> None:

@@ -635,7 +635,7 @@ def test_live_payload_only_interruption_is_repaired_on_resume(
 
     try:
         interrupted_storage = _FailFirstManifestStorage(storage)
-        with pytest.raises(SnapshotHandledError) as interrupted:
+        with pytest.raises(RuntimeError, match="post-payload process boundary"):
             ingest_order_snapshot(
                 storage=interrupted_storage,  # type: ignore[arg-type]
                 postgres_config=app_config.postgres,
@@ -643,7 +643,6 @@ def test_live_payload_only_interruption_is_repaired_on_resume(
                 source_name="orders",
                 source_date=SOURCE_DATE,
             )
-        assert interrupted.value.code is SnapshotErrorCode.STORAGE_FAILED
         assert interrupted_storage.failed
         assert _inventory(app_config, raw_keys[0].rsplit("/", 1)[0] + "/") == {raw_keys[0]}
         assert _inventory(app_config, manifest_keys[0].rsplit("/", 1)[0] + "/") == set()

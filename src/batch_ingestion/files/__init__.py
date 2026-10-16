@@ -21,8 +21,9 @@ from .diagnostics import (
     file_record_counters,
     primary_rejection_code,
 )
-from .events import FileIngestionEvent, FileOutcome
+from .events import FileErrorCode, FileIngestionEvent, FileOutcome
 from .service import (
+    FileIngestionError,
     FileIngestionResult,
     FileIngestionStateError,
     FileStorage,
@@ -38,7 +39,9 @@ __all__ = [
     "DeliveryDescriptor",
     "DuplicateClass",
     "FileDiagnostic",
+    "FileErrorCode",
     "FileFormat",
+    "FileIngestionError",
     "FileIngestionEvent",
     "FileIngestionResult",
     "FileIngestionStateError",

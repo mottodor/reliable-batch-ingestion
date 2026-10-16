@@ -8,7 +8,7 @@ import os
 import stat
 import sys
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager, nullcontext
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import date
 from enum import IntEnum
@@ -19,11 +19,11 @@ from typing import BinaryIO, Never, TextIO, cast
 from botocore.exceptions import BotoCoreError, ClientError
 
 from batch_ingestion.config import AppConfig, ConfigurationError, FileConfig
-from batch_ingestion.storage import S3Storage, StorageError, create_s3_client
+from batch_ingestion.storage import StorageError, storage_session
 
 from .contracts import DeliveryDescriptor, parse_landing_key
 from .events import FileOutcome
-from .service import FileIngestionStateError, ingest_file_delivery
+from .service import FileIngestionError, FileStorage, ingest_file_delivery
 
 _CHECKSUM_LENGTH = 64
 _LOCAL_READ_CHUNK_SIZE = 64 * 1024
@@ -215,60 +215,30 @@ def main(
                 delivery = local_file.delivery
             assert delivery is not None
 
-            try:
-                client = create_s3_client(config.storage)
-            except (BotoCoreError, ClientError, OSError):
-                _emit_error(
-                    code="runtime_error",
-                    message="File ingestion runtime setup failed",
-                    output=destination,
-                )
-                return CliExitCode.RUNTIME_ERROR
+            def storage_session_provider() -> AbstractContextManager[FileStorage]:
+                return storage_session(config.storage)
 
-            handled_failure = False
-            result = None
             try:
-                with closing(client):
-                    storage = S3Storage(client=client, bucket=config.storage.bucket)
-                    try:
-                        if local_file is not None:
-                            local_file.stream.seek(0)
-                            storage.write_immutable(
-                                delivery.landing_key,
-                                local_file.stream,
-                                content_length=local_file.content_length,
-                                checksum_sha256=delivery.actual_sha256,
-                                content_type=delivery.content_type,
-                            )
-                        result = ingest_file_delivery(
-                            storage=storage,
-                            config=config.file,
-                            delivery=delivery,
-                            event_sink=lambda event: _emit(event, output=destination),
-                        )
-                    except (
-                        BotoCoreError,
-                        ClientError,
-                        FileIngestionStateError,
-                        StorageError,
-                    ):
-                        handled_failure = True
-                        _emit_error(
-                            code="ingestion_failed",
-                            message="File ingestion did not reach a terminal disposition",
-                            output=destination,
-                        )
-            except (BotoCoreError, ClientError, OSError):
-                _emit_error(
-                    code="runtime_error",
-                    message="File ingestion runtime cleanup failed",
-                    output=destination,
+                result = ingest_file_delivery(
+                    storage_session_provider=storage_session_provider,
+                    config=config.file,
+                    delivery=delivery,
+                    landing_stream=local_file.stream if local_file is not None else None,
+                    landing_content_length=(
+                        local_file.content_length if local_file is not None else None
+                    ),
+                    event_sink=lambda event: _emit(event, output=destination),
                 )
-                return CliExitCode.RUNTIME_ERROR
-
-            if handled_failure:
+            except FileIngestionError:
                 return CliExitCode.INGESTION_FAILED
-            assert result is not None
+            except (BotoCoreError, ClientError, OSError, StorageError):
+                _emit_error(
+                    code="runtime_error",
+                    message="File ingestion runtime setup or cleanup failed",
+                    output=destination,
+                )
+                return CliExitCode.RUNTIME_ERROR
+
             if result.event.outcome is FileOutcome.REJECTED:
                 return CliExitCode.INGESTION_FAILED
             return CliExitCode.SUCCESS

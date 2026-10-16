@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -12,7 +12,7 @@ from typing import BinaryIO, cast
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 from mypy_boto3_s3 import S3Client
 
 from .checksums import DEFAULT_CHUNK_SIZE
@@ -23,10 +23,16 @@ from .manifests import Manifest
 CHECKSUM_METADATA_KEY = "checksum-sha256"
 DEFAULT_MAX_MANIFEST_BYTES = 64 * 1024
 _MISSING_ERROR_CODES = frozenset({"404", "NoSuchKey", "NotFound"})
+_BACKEND_ERROR_MESSAGE = "storage backend request failed"
+_BACKEND_EXCEPTIONS = (BotoCoreError, ClientError)
 
 
 class StorageError(RuntimeError):
     """Base class for storage contract failures created by this module."""
+
+
+class StorageBackendError(StorageError):
+    """Raised for a redacted Botocore client, transport, or service failure."""
 
 
 class ObjectConflictError(StorageError):
@@ -120,23 +126,56 @@ class _SmallObject:
 
 def create_s3_client(config: StorageConfig) -> S3Client:
     """Construct an explicit SigV4 S3 client without performing network I/O."""
-    return boto3.client(
-        "s3",
-        endpoint_url=config.endpoint_url,
-        region_name=config.region,
-        aws_access_key_id=config.access_key,
-        aws_secret_access_key=config.secret_key,
-        config=Config(
-            signature_version="s3v4",
-            connect_timeout=config.connect_timeout_seconds,
-            read_timeout=config.read_timeout_seconds,
-            retries={
-                "mode": "standard",
-                "total_max_attempts": config.total_max_attempts,
-            },
-            s3={"addressing_style": config.addressing_style},
-        ),
-    )
+    try:
+        return boto3.client(
+            "s3",
+            endpoint_url=config.endpoint_url,
+            region_name=config.region,
+            aws_access_key_id=config.access_key,
+            aws_secret_access_key=config.secret_key,
+            config=Config(
+                signature_version="s3v4",
+                connect_timeout=config.connect_timeout_seconds,
+                read_timeout=config.read_timeout_seconds,
+                retries={
+                    "mode": "standard",
+                    "total_max_attempts": config.total_max_attempts,
+                },
+                s3={"addressing_style": config.addressing_style},
+            ),
+        )
+    except _BACKEND_EXCEPTIONS as error:
+        raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
+
+
+@contextmanager
+def storage_session(
+    config: StorageConfig,
+    *,
+    client_factory: Callable[[StorageConfig], S3Client] = create_s3_client,
+) -> Iterator[S3Storage]:
+    """Yield one context-owned storage boundary and close its configured client."""
+    try:
+        client = client_factory(config)
+    except StorageError:
+        raise
+    except _BACKEND_EXCEPTIONS as error:
+        raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
+
+    primary_error: BaseException | None = None
+    try:
+        yield S3Storage(client=client, bucket=config.bucket)
+    except BaseException as error:
+        primary_error = error
+        raise
+    finally:
+        try:
+            client.close()
+        except _BACKEND_EXCEPTIONS as error:
+            if primary_error is not None:
+                primary_error.add_note("S3 client close also failed")
+            else:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
 
 
 class S3Storage:
@@ -193,7 +232,9 @@ class S3Storage:
         except ClientError as error:
             if _is_missing(error):
                 raise ObjectNotFoundError(f"object {key!r} does not exist") from error
-            raise
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
+        except BotoCoreError as error:
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
 
         body = response["Body"]
         with SpooledTemporaryFile(max_size=spool_threshold_bytes, mode="w+b") as stream:
@@ -206,16 +247,22 @@ class S3Storage:
                 if declared_length > maximum_bytes:
                     raise ObjectSizeLimitError(f"object {key!r} exceeds the maximum download size")
 
-                while chunk := body.read(self._chunk_size):
-                    actual_length += len(chunk)
-                    if actual_length > maximum_bytes:
-                        raise ObjectSizeLimitError(
-                            f"object {key!r} exceeds the maximum download size"
-                        )
-                    digest.update(chunk)
-                    stream.write(chunk)
+                try:
+                    while chunk := body.read(self._chunk_size):
+                        actual_length += len(chunk)
+                        if actual_length > maximum_bytes:
+                            raise ObjectSizeLimitError(
+                                f"object {key!r} exceeds the maximum download size"
+                            )
+                        digest.update(chunk)
+                        stream.write(chunk)
+                except _BACKEND_EXCEPTIONS as error:
+                    raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
             finally:
-                body.close()
+                try:
+                    body.close()
+                except _BACKEND_EXCEPTIONS as error:
+                    raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
 
             if declared_length != actual_length:
                 raise ObjectVerificationError(
@@ -289,14 +336,17 @@ class S3Storage:
             )
             return ImmutableWriteResult(ImmutableWriteStatus.UNCHANGED, existing)
 
-        self._client.put_object(
-            Bucket=self._bucket,
-            Key=key,
-            Body=stream,
-            ContentLength=content_length,
-            ContentType=content_type,
-            Metadata={CHECKSUM_METADATA_KEY: checksum_sha256},
-        )
+        try:
+            self._client.put_object(
+                Bucket=self._bucket,
+                Key=key,
+                Body=stream,
+                ContentLength=content_length,
+                ContentType=content_type,
+                Metadata={CHECKSUM_METADATA_KEY: checksum_sha256},
+            )
+        except _BACKEND_EXCEPTIONS as error:
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
         stored = self._require_object(key)
         self._require_match(
             stored,
@@ -349,12 +399,15 @@ class S3Storage:
         )
 
         if destination is None:
-            self._client.copy_object(
-                Bucket=self._bucket,
-                Key=destination_key,
-                CopySource={"Bucket": self._bucket, "Key": source_key},
-                MetadataDirective="COPY",
-            )
+            try:
+                self._client.copy_object(
+                    Bucket=self._bucket,
+                    Key=destination_key,
+                    CopySource={"Bucket": self._bucket, "Key": source_key},
+                    MetadataDirective="COPY",
+                )
+            except _BACKEND_EXCEPTIONS as error:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
             destination = self._require_object(destination_key)
             self._require_match(
                 destination,
@@ -378,7 +431,10 @@ class S3Storage:
                 f"destination object {destination_key!r} does not preserve source metadata"
             )
 
-        self._client.delete_object(Bucket=self._bucket, Key=source_key)
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=source_key)
+        except _BACKEND_EXCEPTIONS as error:
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
         if self._read_object(source_key) is not None:
             raise ObjectVerificationError(f"source object {source_key!r} still exists after delete")
 
@@ -486,17 +542,25 @@ class S3Storage:
         except ClientError as error:
             if _is_missing(error):
                 return None
-            raise
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
+        except BotoCoreError as error:
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
 
         body = response["Body"]
         digest = sha256()
         actual_length = 0
         try:
-            while chunk := body.read(self._chunk_size):
-                digest.update(chunk)
-                actual_length += len(chunk)
+            try:
+                while chunk := body.read(self._chunk_size):
+                    digest.update(chunk)
+                    actual_length += len(chunk)
+            except _BACKEND_EXCEPTIONS as error:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
         finally:
-            body.close()
+            try:
+                body.close()
+            except _BACKEND_EXCEPTIONS as error:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
 
         declared_length = response.get("ContentLength")
         if declared_length is None or declared_length != actual_length:
@@ -517,21 +581,35 @@ class S3Storage:
         except ClientError as error:
             if _is_missing(error):
                 return None
-            raise
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
+        except BotoCoreError as error:
+            raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
 
         body = response["Body"]
         declared_length = response.get("ContentLength")
         if declared_length is None:
-            body.close()
+            try:
+                body.close()
+            except _BACKEND_EXCEPTIONS as error:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
             raise ObjectVerificationError(f"object {key!r} has no content length")
         if declared_length > maximum_bytes:
-            body.close()
+            try:
+                body.close()
+            except _BACKEND_EXCEPTIONS as error:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
             raise ObjectVerificationError(f"object {key!r} exceeds the maximum manifest size")
 
         try:
-            content = body.read(maximum_bytes + 1)
+            try:
+                content = body.read(maximum_bytes + 1)
+            except _BACKEND_EXCEPTIONS as error:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
         finally:
-            body.close()
+            try:
+                body.close()
+            except _BACKEND_EXCEPTIONS as error:
+                raise StorageBackendError(_BACKEND_ERROR_MESSAGE) from error
         if len(content) != declared_length or len(content) > maximum_bytes:
             raise ObjectVerificationError(f"object {key!r} returned inconsistent content length")
 

@@ -1,6 +1,6 @@
 # File ingestion contract
 
-This document describes the implemented `BI-060` behavior for bounded, restart-safe supplier-price ingestion from CSV, JSON, and Parquet files. [ADR 0002](../adr/0002-use-whole-file-atomicity-for-file-ingestion.md) makes one delivered file the business acceptance unit. The identifier, manifest, summary, source-schema, and shared S3 rules remain governed by [`core-contracts.md`](../contracts/core-contracts.md), [`source-contracts.md`](../contracts/source-contracts.md), and [`storage-contract.md`](../contracts/storage-contract.md).
+This document describes the implemented `BI-060` behavior for bounded, restart-safe supplier-price ingestion from CSV, JSON, and Parquet files, including the source-owned storage/staging failure boundary added by `BI-093`. [ADR 0002](../adr/0002-use-whole-file-atomicity-for-file-ingestion.md) makes one delivered file the business acceptance unit. The identifier, manifest, summary, source-schema, and shared S3 rules remain governed by [`core-contracts.md`](../contracts/core-contracts.md), [`source-contracts.md`](../contracts/source-contracts.md), and [`storage-contract.md`](../contracts/storage-contract.md).
 
 The delivery claim is limited to deterministic keys, immutable/idempotent writes, and safe sequential redelivery. S3 movement is recoverable `copy -> verify -> delete`, not an atomic rename. This is not an exactly-once claim, and concurrent writers for the same logical delivery are unsupported.
 
@@ -28,7 +28,7 @@ make ingest-file ARGS="resume --landing-key 'landing/file/supplier-prices/source
 - the local byte count does not exceed `FILE_MAX_BYTES`;
 - the source and basename can be represented by the existing canonical identifier and manifest contracts.
 
-The local file is streamed in 64 KiB chunks to calculate its exact length and SHA-256. Its basename, not its local directory, becomes `original_file_name`. The exact stream is then written immutably to the deterministic landing key; the storage boundary verifies the stream again, so a file changed between admission hashing and upload cannot be published with stale identity metadata.
+The local file is streamed in 64 KiB chunks to calculate its exact length and SHA-256. Its basename, not its local directory, becomes `original_file_name`. After admission establishes the complete delivery descriptor, the file service creates a fresh `run_id`, opens its context-owned S3 session, and writes the exact stream immutably to the deterministic landing key. The storage boundary verifies the stream again, so a file changed between admission hashing and upload cannot be published with stale identity metadata. Session setup, landing staging, processing, and client close are therefore inside one source attempt; terminal success is delayed until clean session exit.
 
 An OS-level missing, unreadable, non-regular, oversized, or unrepresentable local path is an admission failure and creates no S3 state. Once bytes have been staged, a business or parser validation failure is retained under canonical raw and rejected keys. This distinction is necessary because bytes that were never readable cannot be preserved.
 
@@ -190,9 +190,12 @@ Each structured detail contains only:
 
 ## Counters and structured output
 
-A terminal accepted or retained-rejection operation emits newline-delimited JSON: one `file_ingestion` event followed by one `run_summary`.
+Every source-owned terminal outcome emits newline-delimited JSON as exactly one `file_ingestion` event followed by exactly one `run_summary`. Accepted and rejected business outcomes keep their existing forms. A storage/system outcome uses `outcome=failed`, a nullable `disposition_key` and duplicate class when those facts are not yet known, no `rejection_code` or validation diagnostics, and one stable system code:
 
-The terminal event includes outcome, nullable primary rejection code, bounded details, source/date, current physical `batch_id`/`run_id`, all relevant keys, admitted original filename, declared format, and duplicate class. A pre-terminal storage/state failure emits a secret-free `cli_error` instead of inventing a successful business outcome or manifest.
+- `storage_failed` for known backend setup, request, response-stream, or close failure;
+- `storage_state_failed` for a missing/conflicting/non-convergent deterministic storage state.
+
+The terminal event always retains the known landing/raw/manifest keys, source/date, admitted filename/format, `batch_id`, and current `run_id`. Backend exception text, endpoints, credentials, local paths, payload values, and row values are not serialized. The underlying storage error remains the chained cause of the typed file exception. The CLI returns exit `4` after the already emitted pair and does not append `cli_error`.
 
 The BI-060 `RunSummary` fields mean:
 
@@ -207,6 +210,8 @@ The BI-060 `RunSummary` fields mean:
 | `duplicate_count` | One for an understood complete-pair redelivery; otherwise zero |
 | `duration_seconds` | Monotonic elapsed time for the restart-safe service attempt |
 | `source_date`, `batch_id`, `run_id` | Trace identifiers for this physical attempt |
+
+Failure counters report only confirmed progress. Session setup, landing staging, or download failure before validation reports zero record counters; a later failure retains validated counters already established. `bytes_written` increases only after canonical raw creation is verified, never for landing/disposition copies or an uncertain write. Duplicate count and disposition fields remain unset until their corresponding state is proven.
 
 A parseable mixed three-record file reports `records_read=3`, `records_accepted=0`, and `records_rejected=3`. An empty rejection reports zero for all three record counters and remains visible through outcome, manifest status, rejected key, and rejection code. If parsing becomes unsafe, counters include only records already read with trustworthy boundaries; the rejection code is authoritative.
 
@@ -253,7 +258,7 @@ Transient storage/system failures do not create a terminal `failed` file manifes
 | `2` | Invalid arguments or local-file admission failure; no bytes entered S3 through this command |
 | `3` | Invalid/missing runtime configuration |
 | `4` | Retained business rejection, recoverable ingestion/state conflict, or S3 operation failure |
-| `5` | Runtime S3 client setup or cleanup failure |
+| `5` | Unexpected non-storage runtime failure outside the handled source attempt |
 
 A rejected file intentionally exits non-zero even though its bytes, reason-bearing disposition, terminal manifest, event, and summary were successfully retained.
 
@@ -267,8 +272,8 @@ A rejected file intentionally exits non-zero even though its bytes, reason-beari
 | Same content under another valid name | Different landing key, same batch/raw/final keys; original manifest/run ID unchanged; duplicate class `renamed_content` | No recovery needed; no second business-data copy is created |
 | Stop after raw write or after final move but before manifest | Raw evidence remains; final destination may also remain; no terminal manifest | `make ingest-file ARGS="resume --landing-key '<original-canonical-landing-key>'"` |
 | Copy succeeds but landing delete fails | Landing and destination both contain verified identical bytes; raw is preserved; manifest is not yet written | Run the same `resume`; it verifies destination, retries delete, and then writes the manifest |
-| S3 temporarily unavailable | Existing deterministic objects remain unchanged; command emits `ingestion_failed` and exit `4` once bounded request retries end | Restore S3, then rerun the same `run` or `resume` |
-| Conflicting deterministic object or manifest-only/corrupt state | Evidence is retained; nothing is overwritten or automatically deleted | Inspect exact keys and repair only through an explicit reviewed operator action, then rerun |
+| S3 temporarily unavailable during session setup, staging, download, inspection, write, copy, delete, verification, or close | Confirmed deterministic objects remain unchanged; no failed manifest is created; output ends with `file_ingestion` outcome `failed`, `storage_failed`, then `run_summary`, exit `4` | Restore S3, then rerun the same `run` or `resume` |
+| Conflicting deterministic object or manifest-only/corrupt state | Evidence is retained; nothing is overwritten or automatically deleted; output uses `storage_state_failed` plus the final summary | Inspect exact keys and repair only through an explicit reviewed operator action, then rerun |
 
 ## Limitations
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from batch_ingestion.config import FileConfig
 from batch_ingestion.files import (
     DeliveryDescriptor,
     DuplicateClass,
+    FileErrorCode,
+    FileIngestionError,
     FileOutcome,
     RejectionCode,
 )
@@ -37,6 +40,7 @@ from batch_ingestion.storage import (
     ObjectNotFoundError,
     ReconciliationResult,
     ReconciliationState,
+    StorageBackendError,
     StoredObject,
 )
 
@@ -302,6 +306,7 @@ def _ingest(
     delivery: DeliveryDescriptor,
     *,
     validator: Callable[..., FileValidationResult] = validate_file,
+    event_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> FileIngestionResult:
     ticks = iter((10.0, 12.5))
     return ingest_file_delivery(
@@ -312,6 +317,7 @@ def _ingest(
         utc_now=lambda: EXTRACTED_AT,
         run_id_factory=lambda: RUN_ID,
         validator=validator,
+        event_sink=event_sink,
     )
 
 
@@ -445,8 +451,12 @@ def test_complete_manifest_status_must_match_revalidation() -> None:
     storage.put_payload(delivery.archive_key, payload, delivery.content_type)
     storage.put_manifest(_terminal_manifest(delivery, payload, status=ManifestStatus.REJECTED))
 
-    with pytest.raises(FileIngestionStateError, match="status"):
+    with pytest.raises(FileIngestionError) as captured:
         _ingest(storage, delivery)
+
+    assert captured.value.code is FileErrorCode.STORAGE_STATE_FAILED
+    assert isinstance(captured.value.__cause__, FileIngestionStateError)
+    assert "status" in str(captured.value.__cause__)
 
 
 def test_alternative_disposition_conflict_preserves_all_evidence() -> None:
@@ -457,9 +467,12 @@ def test_alternative_disposition_conflict_preserves_all_evidence() -> None:
     storage.put_payload(delivery.landing_key, payload, delivery.content_type)
     storage.put_payload(alternative, payload, delivery.content_type)
 
-    with pytest.raises(FileIngestionStateError, match="alternative disposition"):
+    with pytest.raises(FileIngestionError) as captured:
         _ingest(storage, delivery)
 
+    assert captured.value.code is FileErrorCode.STORAGE_STATE_FAILED
+    assert isinstance(captured.value.__cause__, FileIngestionStateError)
+    assert "alternative disposition" in str(captured.value.__cause__)
     assert delivery.landing_key in storage.objects
     assert delivery.raw_key in storage.objects
     assert alternative in storage.objects
@@ -475,13 +488,28 @@ def test_manifest_only_and_missing_evidence_fail_without_cleanup() -> None:
     manifest_only.put_manifest(
         _terminal_manifest(delivery, payload, status=ManifestStatus.SUCCEEDED)
     )
-    with pytest.raises(FileIngestionStateError, match="manifest-only"):
+    with pytest.raises(FileIngestionError) as manifest_failure:
         _ingest(manifest_only, delivery)
+    assert manifest_failure.value.code is FileErrorCode.STORAGE_STATE_FAILED
+    assert isinstance(manifest_failure.value.__cause__, FileIngestionStateError)
+    assert "manifest-only" in str(manifest_failure.value.__cause__)
     assert delivery.landing_key in manifest_only.objects
 
     missing = RecordingStorage()
-    with pytest.raises(ObjectNotFoundError, match="landing.*raw"):
-        _ingest(missing, delivery)
+    emitted: list[dict[str, object]] = []
+    with pytest.raises(FileIngestionError) as missing_failure:
+        _ingest(missing, delivery, event_sink=emitted.append)
+    assert missing_failure.value.code is FileErrorCode.STORAGE_STATE_FAILED
+    assert isinstance(missing_failure.value.__cause__, ObjectNotFoundError)
+    assert "landing" in str(missing_failure.value.__cause__)
+    assert "raw" in str(missing_failure.value.__cause__)
+    assert emitted == [
+        missing_failure.value.event.to_dict(),
+        {"event": "run_summary", **missing_failure.value.summary.to_dict()},
+    ]
+    assert emitted[0]["error_code"] == "storage_state_failed"
+    assert emitted[0]["disposition_key"] is None
+    assert emitted[0]["duplicate_class"] is None
     assert missing.objects == {}
 
 
@@ -540,3 +568,227 @@ def test_move_failure_after_copy_leaves_retryable_raw_and_both_disposition_objec
     resumed = _ingest(storage, delivery)
     assert resumed.manifest.status is ManifestStatus.SUCCEEDED
     assert delivery.landing_key not in storage.objects
+
+
+class BackendFailingStorage(RecordingStorage):
+    """Inject one normalized backend failure while retaining exact fake object state."""
+
+    def __init__(self, failure_point: str) -> None:
+        super().__init__()
+        self.failure_point = failure_point
+        self.backend_error = _storage_backend_error()
+
+    def _fail(self, point: str) -> None:
+        if self.failure_point == point:
+            raise self.backend_error
+
+    @contextmanager
+    def download_spooled(
+        self,
+        key: str,
+        *,
+        maximum_bytes: int,
+        spool_threshold_bytes: int,
+        expected_checksum_sha256: str | None = None,
+        expected_content_length: int | None = None,
+    ) -> Iterator[DownloadedObject]:
+        self._fail("raw_download" if key.startswith("raw/") else "landing_download")
+        with super().download_spooled(
+            key,
+            maximum_bytes=maximum_bytes,
+            spool_threshold_bytes=spool_threshold_bytes,
+            expected_checksum_sha256=expected_checksum_sha256,
+            expected_content_length=expected_content_length,
+        ) as downloaded:
+            yield downloaded
+
+    def inspect_object(
+        self,
+        key: str,
+        *,
+        content_length: int,
+        checksum_sha256: str,
+    ) -> StoredObject | None:
+        self._fail("inspection")
+        return super().inspect_object(
+            key,
+            content_length=content_length,
+            checksum_sha256=checksum_sha256,
+        )
+
+    def reconcile_payload_manifest(
+        self,
+        payload_key: str,
+        *,
+        content_length: int,
+        checksum_sha256: str,
+    ) -> ReconciliationResult:
+        self._fail("reconciliation")
+        return super().reconcile_payload_manifest(
+            payload_key,
+            content_length=content_length,
+            checksum_sha256=checksum_sha256,
+        )
+
+    def write_immutable(
+        self,
+        key: str,
+        stream: BinaryIO,
+        *,
+        content_length: int,
+        checksum_sha256: str,
+        content_type: str,
+    ) -> ImmutableWriteResult:
+        if key.startswith("landing/"):
+            self._fail("landing_stage")
+        elif key.startswith("raw/"):
+            self._fail("raw_write")
+        elif key.startswith("manifests/"):
+            self._fail("manifest_write")
+        return super().write_immutable(
+            key,
+            stream,
+            content_length=content_length,
+            checksum_sha256=checksum_sha256,
+            content_type=content_type,
+        )
+
+    def move_verified(
+        self,
+        source_key: str,
+        destination_key: str,
+        *,
+        content_length: int,
+        checksum_sha256: str,
+    ) -> MoveResult:
+        if self.failure_point == "disposition_copy":
+            raise self.backend_error
+        if self.failure_point == "disposition_delete":
+            source = self.objects[source_key]
+            self.objects[destination_key] = _Object(
+                body=source.body,
+                content_type=source.content_type,
+                metadata=dict(source.metadata),
+            )
+            raise self.backend_error
+        return super().move_verified(
+            source_key,
+            destination_key,
+            content_length=content_length,
+            checksum_sha256=checksum_sha256,
+        )
+
+
+def _storage_backend_error() -> StorageBackendError:
+    try:
+        raise RuntimeError("backend endpoint credential payload sentinel")
+    except RuntimeError as cause:
+        try:
+            raise StorageBackendError("storage backend request failed") from cause
+        except StorageBackendError as error:
+            return error
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "use_stage", "records_read", "bytes_written", "expected_keys"),
+    [
+        ("session_setup", True, 0, 0, set()),
+        ("landing_stage", True, 0, 0, set()),
+        ("landing_download", True, 0, 0, {"landing"}),
+        ("raw_download", False, 0, 0, {"raw"}),
+        ("reconciliation", True, 0, 0, {"landing"}),
+        ("raw_write", True, 0, 0, {"landing"}),
+        ("inspection", True, 15, None, {"landing", "raw"}),
+        ("disposition_copy", True, 15, None, {"landing", "raw"}),
+        ("disposition_delete", True, 15, None, {"landing", "raw", "archive"}),
+        ("manifest_write", True, 15, None, {"raw", "archive"}),
+        ("session_close", True, 15, None, {"raw", "archive", "manifest"}),
+    ],
+)
+def test_backend_storage_failures_emit_one_terminal_pair_with_confirmed_state(
+    failure_point: str,
+    use_stage: bool,
+    records_read: int,
+    bytes_written: int | None,
+    expected_keys: set[str],
+) -> None:
+    payload = _fixture()
+    delivery = _delivery(payload)
+    storage = BackendFailingStorage(failure_point)
+    emitted: list[dict[str, object]] = []
+    if failure_point == "raw_download":
+        storage.put_payload(delivery.raw_key, payload, delivery.content_type)
+
+    @contextmanager
+    def open_storage() -> Iterator[RecordingStorage]:
+        if failure_point == "session_setup":
+            raise storage.backend_error
+        yield storage
+        if failure_point == "session_close":
+            raise storage.backend_error
+
+    ticks = iter((10.0, 12.5))
+    with pytest.raises(FileIngestionError) as captured:
+        ingest_file_delivery(
+            storage_session_provider=open_storage,
+            config=CONFIG,
+            delivery=delivery,
+            landing_stream=io.BytesIO(payload) if use_stage else None,
+            landing_content_length=len(payload) if use_stage else None,
+            monotonic=lambda: next(ticks),
+            utc_now=lambda: EXTRACTED_AT,
+            run_id_factory=lambda: RUN_ID,
+            event_sink=emitted.append,
+        )
+
+    failure = captured.value
+    assert failure.code is FileErrorCode.STORAGE_FAILED
+    assert failure.__cause__ is storage.backend_error
+    assert storage.backend_error.__cause__ is not None
+    assert failure.event.outcome is FileOutcome.FAILED
+    assert failure.event.error_code is FileErrorCode.STORAGE_FAILED
+    assert failure.event.rejection_code is None
+    assert failure.event.diagnostics.details == ()
+    assert failure.event.source_date == failure.summary.source_date == SOURCE_DATE
+    assert failure.event.batch_id == failure.summary.batch_id == delivery.batch_id
+    assert failure.event.run_id == failure.summary.run_id == RUN_ID
+    assert failure.summary.records_read == records_read
+    assert failure.summary.records_accepted == records_read
+    assert failure.summary.records_rejected == 0
+    assert failure.summary.pages_fetched == 0
+    assert failure.summary.bytes_written == (
+        len(payload) if bytes_written is None else bytes_written
+    )
+    assert failure.summary.retry_count == 0
+    assert failure.summary.duplicate_count == 0
+    assert failure.summary.duration_seconds == 2.5
+    assert emitted == [
+        failure.event.to_dict(),
+        {"event": "run_summary", **failure.summary.to_dict()},
+    ]
+    serialized = json.dumps(emitted, sort_keys=True)
+    assert "backend endpoint" not in serialized
+    assert "credential" not in serialized
+    assert "payload sentinel" not in serialized
+
+    key_map = {
+        "landing": delivery.landing_key,
+        "raw": delivery.raw_key,
+        "archive": delivery.archive_key,
+        "manifest": delivery.manifest_key,
+    }
+    assert set(storage.objects) == {key_map[name] for name in expected_keys}
+
+
+def test_unexpected_non_storage_defect_is_not_mislabeled_or_emitted() -> None:
+    payload = _fixture()
+    delivery = _delivery(payload)
+    storage = RecordingStorage()
+    storage.put_payload(delivery.landing_key, payload, delivery.content_type)
+    storage.fail_raw_write = True
+    emitted: list[dict[str, object]] = []
+
+    with pytest.raises(RuntimeError, match="raw write"):
+        _ingest(storage, delivery, event_sink=emitted.append)
+
+    assert emitted == []

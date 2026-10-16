@@ -2,7 +2,8 @@
 
 import json
 import math
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from .identifiers import is_batch_id, is_run_id
@@ -71,3 +72,26 @@ class RunSummary:
     def to_json(self) -> str:
         """Serialize as canonical compact JSON."""
         return json.dumps(self.to_dict(), separators=(",", ":"), sort_keys=True)
+
+
+@dataclass(slots=True)
+class TerminalEmitter:
+    """Emit at most one ordered source-terminal-event and run-summary pair."""
+
+    event_sink: Callable[[dict[str, object]], None] | None
+    _emitted: bool = field(default=False, init=False)
+
+    @property
+    def emitted(self) -> bool:
+        """Report whether the one terminal pair has already been committed to the sink."""
+        return self._emitted
+
+    def emit(self, event: Mapping[str, object], summary: RunSummary) -> None:
+        """Emit one terminal pair, rejecting every duplicate attempt."""
+        if self._emitted:
+            raise RuntimeError("terminal output has already been emitted")
+        self._emitted = True
+        if self.event_sink is None:
+            return
+        self.event_sink(dict(event))
+        self.event_sink({"event": "run_summary", **summary.to_dict()})

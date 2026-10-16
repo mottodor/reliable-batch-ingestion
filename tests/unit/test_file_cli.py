@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from datetime import date
 from hashlib import sha256
 from pathlib import Path
 from types import SimpleNamespace
-from typing import BinaryIO
+from typing import BinaryIO, cast
 
 import pytest
 
@@ -20,8 +22,16 @@ from batch_ingestion.config import (
     SnapshotConfig,
     StorageConfig,
 )
-from batch_ingestion.files import DeliveryDescriptor, FileOutcome
+from batch_ingestion.files import (
+    BoundedDiagnostics,
+    DeliveryDescriptor,
+    FileErrorCode,
+    FileIngestionError,
+    FileIngestionEvent,
+    FileOutcome,
+)
 from batch_ingestion.storage import ImmutableWriteResult, ImmutableWriteStatus, StoredObject
+from batch_ingestion.summary import RunSummary
 
 
 def _config(*, maximum_bytes: int = 1024 * 1024) -> AppConfig:
@@ -120,13 +130,40 @@ def _patch_runtime(
     client = _ClosableS3Client()
     deliveries: list[DeliveryDescriptor] = []
     monkeypatch.setattr(cli, "load_config", lambda environ: config or _config())
-    monkeypatch.setattr(cli, "create_s3_client", lambda storage_config: client)
-    monkeypatch.setattr(cli, "S3Storage", lambda **kwargs: storage)
+
+    @contextmanager
+    def open_storage(storage_config: StorageConfig) -> Iterator[_RecordingStorage]:
+        del storage_config
+        try:
+            yield storage
+        finally:
+            client.close()
+
+    monkeypatch.setattr(cli, "storage_session", open_storage)
 
     def ingest(**kwargs: object) -> object:
         delivery = kwargs["delivery"]
         assert isinstance(delivery, DeliveryDescriptor)
         deliveries.append(delivery)
+        provider = cast(
+            Callable[[], AbstractContextManager[_RecordingStorage]],
+            kwargs["storage_session_provider"],
+        )
+        with provider() as active_storage:
+            assert active_storage is storage
+            stream = cast(BinaryIO | None, kwargs["landing_stream"])
+            content_length = kwargs["landing_content_length"]
+            if stream is not None:
+                assert isinstance(content_length, int)
+                storage.write_immutable(
+                    delivery.landing_key,
+                    stream,
+                    content_length=content_length,
+                    checksum_sha256=delivery.actual_sha256,
+                    content_type=delivery.content_type,
+                )
+            else:
+                assert content_length is None
         sink = kwargs["event_sink"]
         assert callable(sink)
         outcome = FileOutcome.ACCEPTED
@@ -276,12 +313,12 @@ def test_run_admission_failure_creates_no_client_or_s3_state(
     created = False
     monkeypatch.setattr(cli, "load_config", lambda environ: config)
 
-    def unexpected_client(storage_config: StorageConfig) -> object:
+    def unexpected_session(storage_config: StorageConfig) -> object:
         nonlocal created
         created = True
-        raise AssertionError("client must not be created")
+        raise AssertionError("storage session must not be created")
 
-    monkeypatch.setattr(cli, "create_s3_client", unexpected_client)
+    monkeypatch.setattr(cli, "storage_session", unexpected_session)
 
     exit_code = cli.main(
         [
@@ -360,10 +397,10 @@ def test_configuration_and_runtime_failures_have_stable_secret_free_exits(
 
     monkeypatch.setattr(cli, "load_config", lambda environ: _config())
 
-    def failed_client(storage_config: StorageConfig) -> object:
+    def failed_session(storage_config: StorageConfig) -> object:
         raise OSError(secret)
 
-    monkeypatch.setattr(cli, "create_s3_client", failed_client)
+    monkeypatch.setattr(cli, "storage_session", failed_session)
     assert cli.main(argv, environ={}) == cli.CliExitCode.RUNTIME_ERROR
     output = capsys.readouterr().out
     assert secret not in output
@@ -383,14 +420,60 @@ def test_recoverable_ingestion_failure_is_structured_and_closes_client(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from batch_ingestion.files import cli
-    from batch_ingestion.files.service import FileIngestionStateError
 
     source = tmp_path / "supplier-prices-2026-09-01.csv"
     source.write_bytes(b"payload")
     _, client, _ = _patch_runtime(monkeypatch)
 
     def fail(**kwargs: object) -> object:
-        raise FileIngestionStateError("sensitive backend detail")
+        delivery = kwargs["delivery"]
+        assert isinstance(delivery, DeliveryDescriptor)
+        provider = cast(
+            Callable[[], AbstractContextManager[_RecordingStorage]],
+            kwargs["storage_session_provider"],
+        )
+        with provider():
+            pass
+        run_id = "run_" + "1" * 32
+        event = FileIngestionEvent(
+            outcome=FileOutcome.FAILED,
+            error_code=FileErrorCode.STORAGE_FAILED,
+            rejection_code=None,
+            diagnostics=BoundedDiagnostics(details=(), truncated=False),
+            source_name=delivery.source_name,
+            source_date=delivery.source_date,
+            batch_id=delivery.batch_id,
+            run_id=run_id,
+            landing_key=delivery.landing_key,
+            raw_key=delivery.raw_key,
+            manifest_key=delivery.manifest_key,
+            disposition_key=None,
+            original_file_name=delivery.original_file_name,
+            file_format=delivery.file_format,
+            duplicate_class=None,
+        )
+        summary = RunSummary(
+            records_read=0,
+            records_accepted=0,
+            records_rejected=0,
+            pages_fetched=0,
+            bytes_written=0,
+            retry_count=0,
+            duplicate_count=0,
+            duration_seconds=0.0,
+            source_date=delivery.source_date,
+            batch_id=delivery.batch_id,
+            run_id=run_id,
+        )
+        sink = kwargs["event_sink"]
+        assert callable(sink)
+        sink(event.to_dict())
+        sink({"event": "run_summary", **summary.to_dict()})
+        raise FileIngestionError(
+            code=FileErrorCode.STORAGE_FAILED,
+            summary=summary,
+            event=event,
+        )
 
     monkeypatch.setattr(cli, "ingest_file_delivery", fail)
     exit_code = cli.main(
@@ -410,8 +493,7 @@ def test_recoverable_ingestion_failure_is_structured_and_closes_client(
     assert client.closed
     output = capsys.readouterr().out
     assert "sensitive backend detail" not in output
-    assert _json_lines(output)[0] == {
-        "event": "cli_error",
-        "error_code": "ingestion_failed",
-        "message": "File ingestion did not reach a terminal disposition",
-    }
+    lines = _json_lines(output)
+    assert [line["event"] for line in lines] == ["file_ingestion", "run_summary"]
+    assert lines[0]["outcome"] == "failed"
+    assert lines[0]["error_code"] == "storage_failed"

@@ -14,10 +14,18 @@ from .diagnostics import BoundedDiagnostics, DuplicateClass, RejectionCode
 
 
 class FileOutcome(StrEnum):
-    """Business outcome for one completely validated delivery."""
+    """Terminal outcome for one file-ingestion attempt."""
 
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+    FAILED = "failed"
+
+
+class FileErrorCode(StrEnum):
+    """Stable system-failure classifications distinct from business rejection."""
+
+    STORAGE_FAILED = "storage_failed"
+    STORAGE_STATE_FAILED = "storage_state_failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,20 +42,35 @@ class FileIngestionEvent:
     landing_key: str
     raw_key: str
     manifest_key: str
-    disposition_key: str
+    disposition_key: str | None
     original_file_name: str
     file_format: FileFormat
-    duplicate_class: DuplicateClass
+    duplicate_class: DuplicateClass | None
+    error_code: FileErrorCode | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.outcome, FileOutcome):
             raise TypeError("outcome must be a FileOutcome")
-        if self.outcome is FileOutcome.ACCEPTED and self.rejection_code is not None:
-            raise ValueError("accepted outcome must not carry a rejection_code")
-        if self.outcome is FileOutcome.REJECTED and not isinstance(
-            self.rejection_code, RejectionCode
-        ):
-            raise ValueError("rejected outcome must carry a rejection_code")
+        if self.outcome is FileOutcome.FAILED:
+            if not isinstance(self.error_code, FileErrorCode):
+                raise ValueError("failed outcome must carry an error_code")
+            if self.rejection_code is not None:
+                raise ValueError("failed outcome must not carry a rejection_code")
+            if self.diagnostics.details or self.diagnostics.truncated:
+                raise ValueError("failed outcome must not carry validation diagnostics")
+        else:
+            if self.error_code is not None:
+                raise ValueError("business outcome must not carry an error_code")
+            if self.outcome is FileOutcome.ACCEPTED and self.rejection_code is not None:
+                raise ValueError("accepted outcome must not carry a rejection_code")
+            if self.outcome is FileOutcome.REJECTED and not isinstance(
+                self.rejection_code, RejectionCode
+            ):
+                raise ValueError("rejected outcome must carry a rejection_code")
+            if self.disposition_key is None:
+                raise ValueError("business outcome must carry a disposition_key")
+            if not isinstance(self.duplicate_class, DuplicateClass):
+                raise TypeError("business outcome must carry a duplicate_class")
         if normalize_source_name(self.source_name) != self.source_name:
             raise ValueError("source_name must already be normalized")
         if isinstance(self.source_date, datetime) or not isinstance(self.source_date, date):
@@ -58,14 +81,17 @@ class FileIngestionEvent:
             raise ValueError("run_id must use the run_<32 lowercase hex> format")
         if not isinstance(self.file_format, FileFormat):
             raise TypeError("file_format must be a FileFormat")
-        if not isinstance(self.duplicate_class, DuplicateClass):
-            raise TypeError("duplicate_class must be a DuplicateClass")
+        if self.duplicate_class is not None and not isinstance(
+            self.duplicate_class, DuplicateClass
+        ):
+            raise TypeError("duplicate_class must be a DuplicateClass or null")
 
     def to_dict(self) -> dict[str, object]:
         """Return stable JSON-compatible event fields with explicit nullable reason."""
         return {
             "event": "file_ingestion",
             "outcome": self.outcome.value,
+            "error_code": self.error_code.value if self.error_code is not None else None,
             "rejection_code": (
                 self.rejection_code.value if self.rejection_code is not None else None
             ),
@@ -81,7 +107,9 @@ class FileIngestionEvent:
             "disposition_key": self.disposition_key,
             "original_file_name": self.original_file_name,
             "format": self.file_format.value,
-            "duplicate_class": self.duplicate_class.value,
+            "duplicate_class": (
+                self.duplicate_class.value if self.duplicate_class is not None else None
+            ),
         }
 
     def to_json(self) -> str:

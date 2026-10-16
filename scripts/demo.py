@@ -1564,9 +1564,25 @@ def _run_recovery_scenario(
                 "NO_PROXY": "127.0.0.1,localhost",
                 "no_proxy": "127.0.0.1,localhost",
             },
-            expected_exit_codes=frozenset({5}),
+            expected_exit_codes=frozenset({4}),
         )
-        _worker_events(failed, report)
+        attempted_events = _worker_events(failed, report)
+        api_failures = [
+            event
+            for event in attempted_events
+            if event.get("event") == "api_ingestion"
+            and event.get("status") == "failed"
+            and event.get("error_code") == "storage_error"
+        ]
+        summaries = [event for event in attempted_events if event.get("event") == "run_summary"]
+        if (
+            len(api_failures) != 1
+            or len(summaries) != 1
+            or attempted_events[-2:] != (api_failures[0], summaries[0])
+            or api_failures[0].get("batch_id") != summaries[0].get("batch_id")
+            or api_failures[0].get("run_id") != summaries[0].get("run_id")
+        ):
+            raise DemoExecutionError(DemoErrorCode.VERIFICATION_FAILED)
         key = _api_payload_key(config, source_date=source_date, page=1)
         _require_pair_state(
             client,

@@ -41,11 +41,13 @@ from .storage import (
     ReconciliationResult,
     ReconciliationState,
     S3Storage,
+    StorageBackendError,
     StorageError,
     StoredObject,
     create_s3_client,
+    storage_session,
 )
-from .summary import RunSummary
+from .summary import RunSummary, TerminalEmitter
 
 __version__ = "0.1.0"
 
@@ -76,9 +78,11 @@ __all__ = [
     "RunSummary",
     "S3Storage",
     "SourceType",
+    "StorageBackendError",
     "StorageConfig",
     "StorageError",
     "StoredObject",
+    "TerminalEmitter",
     "can_transition",
     "create_s3_client",
     "derive_batch_id",
@@ -87,5 +91,6 @@ __all__ = [
     "raw_object_key",
     "sha256_stream",
     "status_for_outcome",
+    "storage_session",
     "validate_status_transition",
 ]

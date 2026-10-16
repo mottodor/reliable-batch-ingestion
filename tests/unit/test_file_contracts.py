@@ -11,7 +11,9 @@ from batch_ingestion.files import (
     DeliveryDescriptor,
     DuplicateClass,
     FileDiagnostic,
+    FileErrorCode,
     FileFormat,
+    FileIngestionError,
     FileIngestionEvent,
     FileOutcome,
     RejectionCode,
@@ -22,6 +24,7 @@ from batch_ingestion.files import (
     parse_landing_key,
     primary_rejection_code,
 )
+from batch_ingestion.summary import RunSummary
 
 SOURCE_DATE = date(2026, 9, 1)
 PAYLOAD = b"exact supplier payload"
@@ -360,6 +363,115 @@ def test_terminal_event_is_bounded_structured_and_contains_no_secret_or_local_pa
     assert value["details"] == bounded.to_list()
     assert "/tmp/secret-delivery" not in serialized
     assert "storage-secret" not in serialized
+
+
+def test_failed_terminal_event_and_typed_error_are_system_only_and_secret_free() -> None:
+    delivery = _delivery()
+    diagnostics = bounded_diagnostics([], max_details=1)
+    event = FileIngestionEvent(
+        outcome=FileOutcome.FAILED,
+        rejection_code=None,
+        diagnostics=diagnostics,
+        source_name=delivery.source_name,
+        source_date=delivery.source_date,
+        batch_id=delivery.batch_id,
+        run_id=RUN_ID,
+        landing_key=delivery.landing_key,
+        raw_key=delivery.raw_key,
+        manifest_key=delivery.manifest_key,
+        disposition_key=None,
+        original_file_name=delivery.original_file_name,
+        file_format=delivery.file_format,
+        duplicate_class=None,
+        error_code=FileErrorCode.STORAGE_FAILED,
+    )
+    summary = RunSummary(
+        records_read=0,
+        records_accepted=0,
+        records_rejected=0,
+        pages_fetched=0,
+        bytes_written=0,
+        retry_count=0,
+        duplicate_count=0,
+        duration_seconds=0.25,
+        source_date=delivery.source_date,
+        batch_id=delivery.batch_id,
+        run_id=RUN_ID,
+    )
+    error = FileIngestionError(
+        code=FileErrorCode.STORAGE_FAILED,
+        summary=summary,
+        event=event,
+    )
+
+    assert event.to_dict() == {
+        "event": "file_ingestion",
+        "outcome": "failed",
+        "error_code": "storage_failed",
+        "rejection_code": None,
+        "details": [],
+        "details_truncated": False,
+        "source_name": delivery.source_name,
+        "source_date": "2026-09-01",
+        "batch_id": delivery.batch_id,
+        "run_id": RUN_ID,
+        "landing_key": delivery.landing_key,
+        "raw_key": delivery.raw_key,
+        "manifest_key": delivery.manifest_key,
+        "disposition_key": None,
+        "original_file_name": delivery.original_file_name,
+        "format": "csv",
+        "duplicate_class": None,
+    }
+    assert error.code is FileErrorCode.STORAGE_FAILED
+    assert error.summary is summary
+    assert error.event is event
+    assert str(error) == "Storage operation failed"
+    assert "backend-secret" not in event.to_json()
+    assert "backend-secret" not in str(error)
+
+
+def test_file_terminal_event_rejects_mixed_business_and_system_failure_fields() -> None:
+    delivery = _delivery()
+
+    def event(
+        outcome: FileOutcome,
+        *,
+        rejection_code: RejectionCode | None,
+        error_code: FileErrorCode | None,
+    ) -> FileIngestionEvent:
+        return FileIngestionEvent(
+            outcome=outcome,
+            rejection_code=rejection_code,
+            diagnostics=bounded_diagnostics([], max_details=1),
+            source_name=delivery.source_name,
+            source_date=delivery.source_date,
+            batch_id=delivery.batch_id,
+            run_id=RUN_ID,
+            landing_key=delivery.landing_key,
+            raw_key=delivery.raw_key,
+            manifest_key=delivery.manifest_key,
+            disposition_key=None,
+            original_file_name=delivery.original_file_name,
+            file_format=delivery.file_format,
+            duplicate_class=None,
+            error_code=error_code,
+        )
+
+    with pytest.raises(ValueError, match="failed outcome must carry an error_code"):
+        event(FileOutcome.FAILED, rejection_code=None, error_code=None)
+    with pytest.raises(ValueError, match="failed outcome must not carry a rejection_code"):
+        event(
+            FileOutcome.FAILED,
+            rejection_code=RejectionCode.MALFORMED_FILE,
+            error_code=FileErrorCode.STORAGE_STATE_FAILED,
+        )
+    with pytest.raises(ValueError, match="business outcome must not carry an error_code"):
+        event(
+            FileOutcome.ACCEPTED,
+            rejection_code=None,
+            error_code=FileErrorCode.STORAGE_FAILED,
+        )
 
 
 def test_file_ingestion_documentation_covers_public_contract_and_recovery() -> None:

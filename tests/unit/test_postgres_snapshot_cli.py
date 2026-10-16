@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -18,8 +21,10 @@ from batch_ingestion.config import (
     StorageConfig,
 )
 from batch_ingestion.postgres_snapshot import (
+    SnapshotCounters,
     SnapshotDescriptor,
     SnapshotErrorCode,
+    SnapshotEvent,
     SnapshotHandledError,
 )
 
@@ -88,11 +93,25 @@ def _patch_success_runtime(
     client = _ClosableS3Client()
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(cli, "load_config", lambda environ: _config())
-    monkeypatch.setattr(cli, "create_s3_client", lambda config: client)
-    monkeypatch.setattr(cli, "S3Storage", lambda **kwargs: SimpleNamespace())
+
+    @contextmanager
+    def session(config: StorageConfig) -> Iterator[object]:
+        assert config == _config().storage
+        try:
+            yield SimpleNamespace()
+        finally:
+            client.close()
+
+    monkeypatch.setattr(cli, "storage_session", session)
 
     def ingest(**kwargs: object) -> object:
         calls.append(dict(kwargs))
+        provider = cast(
+            "Callable[[], AbstractContextManager[object]]",
+            kwargs["storage_session_provider"],
+        )
+        with provider() as storage:
+            assert isinstance(storage, SimpleNamespace)
         source_date = kwargs["source_date"]
         assert isinstance(source_date, date)
         descriptor = kwargs["resume_descriptor"]
@@ -129,7 +148,7 @@ def _patch_success_runtime(
     return client, calls
 
 
-def test_run_emits_ndjson_delegates_configs_and_closes_s3_client(
+def test_run_emits_ndjson_delegates_configs_and_service_owned_storage_session(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -304,15 +323,15 @@ def test_resume_over_configured_bound_fails_before_client_creation(
 ) -> None:
     from batch_ingestion.postgres_snapshot import cli
 
-    created = False
+    opened = False
     monkeypatch.setattr(cli, "load_config", lambda environ: _config())
 
-    def unexpected_client(config: StorageConfig) -> object:
-        nonlocal created
-        created = True
-        raise AssertionError("client must not be created")
+    def unexpected_session(config: StorageConfig) -> object:
+        nonlocal opened
+        opened = True
+        raise AssertionError("storage session must not be opened")
 
-    monkeypatch.setattr(cli, "create_s3_client", unexpected_client)
+    monkeypatch.setattr(cli, "storage_session", unexpected_session)
 
     exit_code = cli.main(
         [
@@ -332,7 +351,7 @@ def test_resume_over_configured_bound_fails_before_client_creation(
     )
 
     assert exit_code == cli.CliExitCode.USAGE
-    assert not created
+    assert not opened
     assert _json_lines(capsys.readouterr().out)[0]["error_code"] == "invalid_arguments"
 
 
@@ -343,18 +362,18 @@ def test_configuration_failure_has_stable_exit_before_client_creation(
     from batch_ingestion.config import ConfigurationError
     from batch_ingestion.postgres_snapshot import cli
 
-    created = False
+    opened = False
 
     def invalid_config(environ: object) -> AppConfig:
         raise ConfigurationError("invalid configuration")
 
-    def unexpected_client(config: StorageConfig) -> object:
-        nonlocal created
-        created = True
-        raise AssertionError("client must not be created")
+    def unexpected_session(config: StorageConfig) -> object:
+        nonlocal opened
+        opened = True
+        raise AssertionError("storage session must not be opened")
 
     monkeypatch.setattr(cli, "load_config", invalid_config)
-    monkeypatch.setattr(cli, "create_s3_client", unexpected_client)
+    monkeypatch.setattr(cli, "storage_session", unexpected_session)
 
     assert (
         cli.main(
@@ -363,20 +382,45 @@ def test_configuration_failure_has_stable_exit_before_client_creation(
         )
         == cli.CliExitCode.CONFIGURATION
     )
-    assert not created
+    assert not opened
     assert _json_lines(capsys.readouterr().out)[0]["error_code"] == "configuration_error"
 
 
-def test_handled_ingestion_failure_is_secret_free_and_closes_client(
+def test_handled_ingestion_failure_with_terminal_output_is_not_duplicated(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from batch_ingestion.postgres_snapshot import cli
 
-    client, _ = _patch_success_runtime(monkeypatch)
+    _patch_success_runtime(monkeypatch)
+    descriptor = SnapshotDescriptor.empty(
+        source_name="orders",
+        source_date=date(2026, 9, 1),
+    )
+    counters = SnapshotCounters()
+    event = SnapshotEvent.failed(
+        descriptor=descriptor,
+        chunk_rows=_config().snapshot.chunk_rows,
+        batch_id=descriptor.batch_id(chunk_rows=_config().snapshot.chunk_rows),
+        run_id="run_11111111111111111111111111111111",
+        error_code=SnapshotErrorCode.STORAGE_FAILED,
+        counters=counters,
+    )
+    summary = counters.to_run_summary(
+        duration_seconds=0.1,
+        source_date=descriptor.source_date,
+        batch_id=event.batch_id,
+        run_id=event.run_id,
+    )
 
     def fail(**kwargs: object) -> object:
-        raise SnapshotHandledError(SnapshotErrorCode.POSTGRES_CONNECTION_FAILED)
+        sink = kwargs["event_sink"]
+        assert callable(sink)
+        sink(event.to_dict())
+        sink({"event": "run_summary", **summary.to_dict()})
+        error = SnapshotHandledError(SnapshotErrorCode.STORAGE_FAILED)
+        error.attach_terminal(event, summary)
+        raise error
 
     monkeypatch.setattr(cli, "ingest_order_snapshot", fail)
 
@@ -386,49 +430,59 @@ def test_handled_ingestion_failure_is_secret_free_and_closes_client(
     )
 
     assert exit_code == cli.CliExitCode.INGESTION_FAILED
-    assert client.closed
     output = capsys.readouterr().out
     assert "do-not-print-me" not in output
-    assert _json_lines(output)[0] == {
-        "event": "cli_error",
-        "error_code": "postgres_connection_failed",
-        "message": "PostgreSQL snapshot ingestion did not complete",
-    }
+    assert [line["event"] for line in _json_lines(output)] == [
+        "snapshot_failed",
+        "run_summary",
+    ]
 
 
-@pytest.mark.parametrize("failure_point", ["setup", "ingest", "cleanup"])
-def test_unexpected_runtime_failures_have_stable_exit_and_cleanup(
-    failure_point: str,
+def test_pre_descriptor_handled_failure_uses_secret_free_cli_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from batch_ingestion.postgres_snapshot import cli
+
+    _patch_success_runtime(monkeypatch)
+    monkeypatch.setattr(
+        cli,
+        "ingest_order_snapshot",
+        lambda **kwargs: (_ for _ in ()).throw(
+            SnapshotHandledError(SnapshotErrorCode.POSTGRES_CONNECTION_FAILED)
+        ),
+    )
+
+    exit_code = cli.main(
+        ["run", "--source", "orders", "--date", "2026-09-01"],
+        environ={"POSTGRES_PASSWORD": "do-not-print-me"},
+    )
+
+    assert exit_code == cli.CliExitCode.INGESTION_FAILED
+    output = capsys.readouterr().out
+    assert "do-not-print-me" not in output
+    assert _json_lines(output) == [
+        {
+            "event": "cli_error",
+            "error_code": "postgres_connection_failed",
+            "message": "PostgreSQL snapshot ingestion did not complete",
+        }
+    ]
+
+
+def test_unexpected_runtime_failure_has_stable_exit(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     from batch_ingestion.postgres_snapshot import cli
 
     secret = "sensitive-runtime-detail"
-    client = _ClosableS3Client(close_error=OSError(secret) if failure_point == "cleanup" else None)
     monkeypatch.setattr(cli, "load_config", lambda environ: _config())
-
-    if failure_point == "setup":
-        monkeypatch.setattr(
-            cli,
-            "create_s3_client",
-            lambda config: (_ for _ in ()).throw(OSError(secret)),
-        )
-    else:
-        monkeypatch.setattr(cli, "create_s3_client", lambda config: client)
-        monkeypatch.setattr(cli, "S3Storage", lambda **kwargs: SimpleNamespace())
-        if failure_point == "ingest":
-            monkeypatch.setattr(
-                cli,
-                "ingest_order_snapshot",
-                lambda **kwargs: (_ for _ in ()).throw(RuntimeError(secret)),
-            )
-        else:
-            monkeypatch.setattr(
-                cli,
-                "ingest_order_snapshot",
-                lambda **kwargs: SimpleNamespace(),
-            )
+    monkeypatch.setattr(
+        cli,
+        "ingest_order_snapshot",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError(secret)),
+    )
 
     exit_code = cli.main(
         ["run", "--source", "orders", "--date", "2026-09-01"],
@@ -436,8 +490,6 @@ def test_unexpected_runtime_failures_have_stable_exit_and_cleanup(
     )
 
     assert exit_code == cli.CliExitCode.RUNTIME_ERROR
-    if failure_point != "setup":
-        assert client.closed
     output = capsys.readouterr().out
     assert secret not in output
     assert _json_lines(output)[-1]["error_code"] == "runtime_error"

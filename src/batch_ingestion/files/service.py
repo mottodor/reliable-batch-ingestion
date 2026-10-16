@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import time
 from collections.abc import Callable, Iterator
-from contextlib import AbstractContextManager, ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -23,19 +23,44 @@ from batch_ingestion.storage import (
     ObjectNotFoundError,
     ReconciliationResult,
     ReconciliationState,
+    StorageBackendError,
     StorageError,
     StoredObject,
 )
-from batch_ingestion.summary import RunSummary
+from batch_ingestion.summary import RunSummary, TerminalEmitter
 
 from .contracts import DeliveryDescriptor
-from .diagnostics import DuplicateClass, RejectionCode, classify_duplicate
-from .events import FileIngestionEvent, FileOutcome
+from .diagnostics import BoundedDiagnostics, DuplicateClass, RejectionCode, classify_duplicate
+from .events import FileErrorCode, FileIngestionEvent, FileOutcome
 from .validators import FileValidationResult, validate_file
 
 
 class FileIngestionStateError(StorageError):
     """Raised when observed file objects cannot converge without inventing state."""
+
+
+_FILE_ERROR_MESSAGES = {
+    FileErrorCode.STORAGE_FAILED: "Storage operation failed",
+    FileErrorCode.STORAGE_STATE_FAILED: "Storage state could not be reconciled",
+}
+
+
+class FileIngestionError(RuntimeError):
+    """Handled file-attempt failure carrying its terminal event and summary."""
+
+    def __init__(
+        self,
+        *,
+        code: FileErrorCode,
+        summary: RunSummary,
+        event: FileIngestionEvent,
+    ) -> None:
+        if event.outcome is not FileOutcome.FAILED or event.error_code is not code:
+            raise ValueError("file failure event must match the handled error code")
+        self.code = code
+        self.summary = summary
+        self.event = event
+        super().__init__(_FILE_ERROR_MESSAGES[code])
 
 
 class FileStorage(Protocol):
@@ -114,23 +139,139 @@ class FileIngestionResult:
     manifest: Manifest
 
 
+@dataclass(slots=True)
+class _FileAttemptState:
+    records_read: int = 0
+    records_accepted: int = 0
+    records_rejected: int = 0
+    bytes_written: int = 0
+    duplicate_count: int = 0
+    disposition_key: str | None = None
+    duplicate_class: DuplicateClass | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _FileCompletion:
+    event: FileIngestionEvent
+    manifest: Manifest
+
+
 def ingest_file_delivery(
     *,
-    storage: FileStorage,
     config: FileConfig,
     delivery: DeliveryDescriptor,
+    storage: FileStorage | None = None,
+    storage_session_provider: (Callable[[], AbstractContextManager[FileStorage]] | None) = None,
+    landing_stream: BinaryIO | None = None,
+    landing_content_length: int | None = None,
     monotonic: Callable[[], float] = time.monotonic,
     utc_now: Callable[[], datetime] | None = None,
     run_id_factory: Callable[[], str] = new_run_id,
     validator: FileValidator = validate_file,
     event_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> FileIngestionResult:
-    """Preserve, validate, disposition, and manifest one staged delivery."""
+    """Own storage, optional landing staging, and one terminal pair for a file attempt."""
+    if (landing_stream is None) != (landing_content_length is None):
+        raise ValueError("landing stream and content length must be supplied together")
+    if landing_content_length is not None and (
+        isinstance(landing_content_length, bool) or landing_content_length < 0
+    ):
+        raise ValueError("landing content length must be a non-negative integer")
+
     started_at = monotonic()
     run_id = run_id_factory()
     wall_clock = utc_now or _utc_now
-    bytes_written = 0
+    terminal = TerminalEmitter(event_sink)
+    state = _FileAttemptState()
+    completion: _FileCompletion | None = None
 
+    try:
+        with _file_storage_context(
+            storage=storage,
+            storage_session_provider=storage_session_provider,
+        ) as active_storage:
+            if landing_stream is not None:
+                assert landing_content_length is not None
+                landing_stream.seek(0)
+                active_storage.write_immutable(
+                    delivery.landing_key,
+                    landing_stream,
+                    content_length=landing_content_length,
+                    checksum_sha256=delivery.actual_sha256,
+                    content_type=delivery.content_type,
+                )
+            completion = _ingest_file_delivery_with_storage(
+                storage=active_storage,
+                config=config,
+                delivery=delivery,
+                run_id=run_id,
+                wall_clock=wall_clock,
+                validator=validator,
+                state=state,
+            )
+    except StorageError as error:
+        code = (
+            FileErrorCode.STORAGE_FAILED
+            if isinstance(error, StorageBackendError)
+            else FileErrorCode.STORAGE_STATE_FAILED
+        )
+        summary = _file_summary(
+            state,
+            started_at=started_at,
+            monotonic=monotonic,
+            delivery=delivery,
+            run_id=run_id,
+        )
+        event = _failed_file_event(
+            delivery=delivery,
+            run_id=run_id,
+            code=code,
+            state=state,
+        )
+        terminal.emit(event.to_dict(), summary)
+        raise FileIngestionError(code=code, summary=summary, event=event) from error
+
+    if completion is None:
+        raise AssertionError("successful file ingestion has no completion")
+    summary = _file_summary(
+        state,
+        started_at=started_at,
+        monotonic=monotonic,
+        delivery=delivery,
+        run_id=run_id,
+    )
+    terminal.emit(completion.event.to_dict(), summary)
+    return FileIngestionResult(
+        summary=summary,
+        event=completion.event,
+        manifest=completion.manifest,
+    )
+
+
+def _file_storage_context(
+    *,
+    storage: FileStorage | None,
+    storage_session_provider: Callable[[], AbstractContextManager[FileStorage]] | None,
+) -> AbstractContextManager[FileStorage]:
+    if (storage is None) == (storage_session_provider is None):
+        raise ValueError("exactly one file storage boundary must be supplied")
+    if storage_session_provider is not None:
+        return storage_session_provider()
+    assert storage is not None
+    return nullcontext(storage)
+
+
+def _ingest_file_delivery_with_storage(
+    *,
+    storage: FileStorage,
+    config: FileConfig,
+    delivery: DeliveryDescriptor,
+    run_id: str,
+    wall_clock: Callable[[], datetime],
+    validator: FileValidator,
+    state: _FileAttemptState,
+) -> _FileCompletion:
+    """Preserve, validate, disposition, and manifest using acquired storage."""
     with _download_evidence(storage=storage, config=config, delivery=delivery) as downloaded:
         content_length = downloaded.info.content_length
         checksum_sha256 = downloaded.info.checksum_sha256
@@ -161,7 +302,7 @@ def ingest_file_delivery(
                     "absent raw payload was not created under the sequential-writer contract"
                 )
             raw_object = raw_write.object
-            bytes_written = content_length
+            state.bytes_written = content_length
         elif reconciliation.state in {
             ReconciliationState.PAYLOAD_ONLY,
             ReconciliationState.COMPLETE,
@@ -180,7 +321,12 @@ def ingest_file_delivery(
 
         downloaded.stream.seek(0)
         validation = validator(downloaded.stream, delivery=delivery, config=config)
+        counters = validation.counters
+        state.records_read = counters.records_read
+        state.records_accepted = counters.records_accepted
+        state.records_rejected = counters.records_rejected
         disposition_key = _disposition_key(delivery, validation)
+        state.disposition_key = disposition_key
 
         _require_no_alternative_disposition(
             storage=storage,
@@ -228,7 +374,7 @@ def ingest_file_delivery(
                 manifest.original_file_name,
                 delivery.original_file_name,
             )
-            duplicate_count = 1
+            state.duplicate_count = 1
         else:
             manifest = _file_manifest(
                 delivery=delivery,
@@ -240,25 +386,8 @@ def ingest_file_delivery(
             )
             _write_manifest(storage, manifest)
             duplicate_class = DuplicateClass.NEW_DELIVERY
-            duplicate_count = 0
+        state.duplicate_class = duplicate_class
 
-        duration = monotonic() - started_at
-        if duration < 0:
-            raise RuntimeError("monotonic clock moved backwards")
-        counters = validation.counters
-        summary = RunSummary(
-            records_read=counters.records_read,
-            records_accepted=counters.records_accepted,
-            records_rejected=counters.records_rejected,
-            pages_fetched=0,
-            bytes_written=bytes_written,
-            retry_count=0,
-            duplicate_count=duplicate_count,
-            duration_seconds=duration,
-            source_date=delivery.source_date,
-            batch_id=delivery.batch_id,
-            run_id=run_id,
-        )
         event = FileIngestionEvent(
             outcome=FileOutcome.ACCEPTED if validation.accepted else FileOutcome.REJECTED,
             rejection_code=validation.rejection_code,
@@ -275,10 +404,59 @@ def ingest_file_delivery(
             file_format=delivery.file_format,
             duplicate_class=duplicate_class,
         )
-        if event_sink is not None:
-            event_sink(event.to_dict())
-            event_sink({"event": "run_summary", **summary.to_dict()})
-        return FileIngestionResult(summary=summary, event=event, manifest=manifest)
+        return _FileCompletion(event=event, manifest=manifest)
+
+
+def _file_summary(
+    state: _FileAttemptState,
+    *,
+    started_at: float,
+    monotonic: Callable[[], float],
+    delivery: DeliveryDescriptor,
+    run_id: str,
+) -> RunSummary:
+    duration = monotonic() - started_at
+    if duration < 0:
+        raise RuntimeError("monotonic clock moved backwards")
+    return RunSummary(
+        records_read=state.records_read,
+        records_accepted=state.records_accepted,
+        records_rejected=state.records_rejected,
+        pages_fetched=0,
+        bytes_written=state.bytes_written,
+        retry_count=0,
+        duplicate_count=state.duplicate_count,
+        duration_seconds=duration,
+        source_date=delivery.source_date,
+        batch_id=delivery.batch_id,
+        run_id=run_id,
+    )
+
+
+def _failed_file_event(
+    *,
+    delivery: DeliveryDescriptor,
+    run_id: str,
+    code: FileErrorCode,
+    state: _FileAttemptState,
+) -> FileIngestionEvent:
+    return FileIngestionEvent(
+        outcome=FileOutcome.FAILED,
+        error_code=code,
+        rejection_code=None,
+        diagnostics=BoundedDiagnostics(details=(), truncated=False),
+        source_name=delivery.source_name,
+        source_date=delivery.source_date,
+        batch_id=delivery.batch_id,
+        run_id=run_id,
+        landing_key=delivery.landing_key,
+        raw_key=delivery.raw_key,
+        manifest_key=delivery.manifest_key,
+        disposition_key=state.disposition_key,
+        original_file_name=delivery.original_file_name,
+        file_format=delivery.file_format,
+        duplicate_class=state.duplicate_class,
+    )
 
 
 @contextmanager

@@ -19,13 +19,19 @@ from batch_ingestion.config import AppConfig
 from batch_ingestion.files import (
     DeliveryDescriptor,
     DuplicateClass,
+    FileIngestionError,
     FileOutcome,
     RejectionCode,
     ingest_file_delivery,
 )
 from batch_ingestion.files import cli as file_cli
 from batch_ingestion.manifests import ManifestStatus
-from batch_ingestion.storage import ReconciliationState, S3Storage, create_s3_client
+from batch_ingestion.storage import (
+    ReconciliationState,
+    S3Storage,
+    StorageBackendError,
+    create_s3_client,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -505,13 +511,15 @@ def test_live_resume_converges_copy_then_delete_interruption_for_every_format(
             client=cast(Any, proxy),
             bucket=app_config.storage.bucket,
         )
-        with pytest.raises(ClientError, match="ServiceUnavailable"):
+        with pytest.raises(FileIngestionError) as captured:
             ingest_file_delivery(
                 storage=interrupted_storage,
                 config=app_config.file,
                 delivery=delivery,
             )
 
+        assert isinstance(captured.value.__cause__, StorageBackendError)
+        assert isinstance(captured.value.__cause__.__cause__, ClientError)
         assert proxy.delete_attempts == 1
         for key in (delivery.landing_key, delivery.raw_key, delivery.archive_key):
             with storage.download_spooled(

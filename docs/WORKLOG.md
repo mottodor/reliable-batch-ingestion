@@ -579,3 +579,171 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `./scripts/verify.sh` — PASS: doctor, repository policy with BI-091 active and BI-090 done, locked sync, Ruff, strict mypy, 521 offline tests, and Compose rendering.
 - LSP diagnostics over the five changed YAML/Markdown paths — PASS with no error or warning; the spell checker reported six information-only suggestions inside generated hexadecimal identifiers.
 - Next task: execute BI-091 only by accepting the ADR for aggregate REST logical-run manifest cardinality, keys, linkage, completion, reconciliation, replay, and compatibility; do not implement BI-092 behavior in that task.
+
+## 2026-10-15 — BI-091 logical-run manifest decision planning
+
+- Added an implementation-ready three-slice BI-091 plan and completed its constraint inventory without writing the ADR or changing runtime behavior, tests, dependencies, current-behavior documentation, README claims, or stored evidence.
+- Compared the existing page-set/summary interpretation, changing page manifests, synthetic raw payloads, per-attempt aggregates, and one deterministic API-specific aggregate against immutability, boundedness, replay, and compatibility requirements.
+- Proposed for ADR evaluation one immutable batch-level aggregate with a separate strict schema/version, exact ordered page linkage, an explicit byte bound, success-only publication after all page pairs, exact-key reconciliation, and legacy page-only upgrade on replay.
+- Preserved schema-version-1 page manifests, existing `batch_id` and page keys, standard-S3 access, sequential-writer semantics, and the prohibition on exactly-once claims; implementation remains exclusively BI-092.
+- Refined BI-091 canonical scope/acceptance, marked it `in_progress`, indexed the detailed plan, and synchronized `docs/STATE.md` while keeping BI-090 as the last completed task.
+- No Context7 lookup was needed because this planning change makes no external library API or CLI decision.
+- `./scripts/doctor.sh`, repository policy, backlog JSON Schema validation, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked sync, Ruff, strict mypy, 521 offline tests, and Compose rendering.
+- LSP diagnostics and `make integration` — NOT RUN because only YAML/Markdown planning and handoff files changed.
+- Next task: execute BI-091 slice 2 by drafting and accepting ADR 0003, then refine BI-092 without implementing it.
+
+## 2026-10-15 — BI-091 ADR acceptance and implementation handoff
+
+- Accepted and indexed ADR 0003, selecting one immutable success-only API logical-run manifest at a deterministic batch key after comparing the required bounded alternatives.
+- Fixed the separate strict schema-version-1 field set, canonical JSON, 8 MiB declared/actual byte bound, exact checksummed page linkage, publication-before-success order, complete reconciliation matrix, uncertain-write handling, mixed-run replay, and legacy page-only upgrade.
+- Refined BI-092 scope and acceptance directly against every ADR 0003 required-validation row: model/parser/key helper, bounded exact-key streamed verification, completion ordering, all reconciliation states, unit and Garage coverage, backfill, exact inventory/demo inspection, documentation, metric compatibility, and honest delivery semantics.
+- Confirmed that `docs/contracts/core-contracts.md`, `docs/ingestion/api-ingestion.md`, and README still describe only current page-only runtime behavior; BI-091 changed no Python, tests, dependencies, runtime behavior, current object-store evidence, or current-behavior claims.
+- Marked BI-091 done, selected BI-092 as the active `todo` task, and synchronized its detailed plan, canonical backlog, and `docs/STATE.md`.
+- `./scripts/doctor.sh`, repository policy, backlog JSON Schema validation, and `git diff --check` — PASS.
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, strict mypy, 521 offline tests with 66 integration tests deselected, and Compose rendering.
+- LSP diagnostics and `make integration` — NOT RUN because BI-091 changed only YAML/Markdown architecture, planning, and handoff files.
+- Next task: start BI-092 with test-first implementation of the strict ADR 0003 aggregate model, canonical parser/serializer, and deterministic key helper; do not combine another audit repair.
+
+## 2026-10-15 — BI-092 implementation planning
+
+- Added an implementation-ready five-slice BI-092 plan directly under ADR 0003 and marked the active task `in_progress`; no Python, test, dependency, runtime behavior, current-behavior contract, README claim, or stored evidence changed.
+- Fixed ownership for a separate API aggregate model/key/parser and reconciliation module while preserving the shared standard-S3 boundary and unchanged one-payload schema-version-1 `Manifest`.
+- Planned strict canonical bytes and nested duplicate-member rejection, identity/key rederivation, ordered gap-free page linkage, 9,999-page and separate 8 MiB bounds, and exact streamed raw/page-manifest/aggregate checksums.
+- Planned a pre-mutation aggregate barrier plus post-page completion phase for every absent/incomplete/failed/eligible/complete/corrupt/conflicting/orphaned/uncertain-write state, including at most two writes of one frozen byte sequence after uncertain outcomes.
+- Planned test-first service ordering, legacy page-only upgrade, mixed page-manifest run IDs, unchanged metric meanings, Garage/backfill coverage, exact demo inventory, clean-export validation, and operator documentation without expanding into BI-093–BI-096.
+- Checked current Boto3 S3 streamed-body and metadata behavior through Context7 `/boto/boto3`; no new runtime dependency is required.
+- `./scripts/doctor.sh`, repository policy, backlog JSON Schema validation, BI-092 plan coverage smoke check, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked sync, Ruff, strict mypy, 521 offline tests, and Compose rendering.
+- LSP diagnostics and `make integration` — NOT RUN because this planning change touched only YAML/Markdown files.
+- Next task: execute BI-092 slice 1 only by adding failing pure aggregate-contract tests, then the strict model, canonical parser/serializer, and deterministic key helper; do not combine storage/service wiring or BI-093.
+
+## 2026-10-15 — BI-092 slice 1 pure aggregate contract
+
+- Added the focused aggregate test module first and recorded the expected collection failure while `batch_ingestion.api.logical_manifest` did not exist.
+- Added separate frozen `ApiLogicalRunManifest` and `ApiLogicalRunPage` models without changing the shared one-payload `Manifest` schema or runtime service behavior.
+- Implemented both exact ADR key examples, allow-listed API identity and `batch_id` rederivation, exact raw/page-manifest key linkage, immutable identity parameters, and strict success-only schema constants.
+- Added compact sorted UTF-8 serialization and a bytes-only parser that rejects oversized, malformed, noncanonical, BOM/trailing, unsupported, wrong-typed, and nested duplicate-member JSON.
+- Enforced strict empty/full/final pagination relationships, ordered gap-free entries, checksums and signed-64-bit lengths, 9,999 pages, 999,900 records, and the separate 8 MiB bound; the exact maximum-width canonical shipping document is 6,098,762 bytes.
+- Exported the pure aggregate surface from `batch_ingestion.api`; added no dependency, I/O, clock, environment, S3, service, demo, README, or current-behavior documentation change.
+- Focused aggregate/source/page-manifest tests — PASS (92); LSP diagnostics — PASS with no findings; `make lint` — PASS; `make test` — PASS (574 offline tests, 66 integration deselected); `./scripts/verify.sh` — PASS with Compose rendering.
+- `make integration` — NOT RUN because slice 1 is pure and changes no storage, service, or Compose behavior. BI-092 remains active and `in_progress`.
+- Next task: execute BI-092 slice 2 only by implementing exact streamed evidence, reconciliation classifications, and bounded frozen-byte uncertain-write recovery behind tests; do not wire the service or start BI-093.
+
+## 2026-10-15 — BI-092 slice 2 exact evidence and reconciliation
+
+- Added the focused reconciliation test module first and recorded the expected collection failure while `batch_ingestion.api.logical_run` did not exist.
+- Added an API-owned exact-key reader over the existing context-owned bounded storage spool; aggregate, raw-page, and exact canonical page-manifest checksums come from actual streamed bytes rather than ETag or prefix listing.
+- Added typed absent, incomplete, failed, eligible, complete, corrupt, conflicting, orphaned, and uncertain-write outcomes with preflight mutation barriers for malformed, noncanonical, oversized, wrong-identity/count, missing-reference, raw-mismatch, and page-manifest-mismatch cases.
+- Added strict duplicate-member and canonical-byte checks for referenced schema-version-1 page manifests while retaining mixed page-manifest run IDs and the unchanged shared manifest schema.
+- Added publication convergence that requires all page evidence before writing, freezes one aggregate byte sequence, invokes immutable write at most twice, rewinds identical bytes on retry, accepts only fully verified identical uncertain writes, and leaves different present bytes unchanged as a conflict.
+- Added no dependency and changed no shared storage implementation, REST service behavior, CLI, backfill, demo inventory, Garage integration, README, or current-behavior ingestion contract.
+- Focused aggregate/evidence/service/source tests — PASS (117); LSP diagnostics — PASS with no findings; `make lint` — PASS; `make test` — PASS (599 offline tests, 66 integration deselected); `./scripts/verify.sh` — PASS with Compose rendering.
+- `make integration` — NOT RUN because slice 2 does not yet wire runtime service or Garage behavior. BI-092 remains active and `in_progress`.
+- Next task: execute BI-092 slice 3 only by wiring aggregate preflight, page evidence, publication, and final verification into the single-date service before terminal success output; do not start demo/Garage work or BI-093.
+
+## 2026-10-15 — BI-092 slice 3 single-date service publication
+
+- Added service tests first and recorded the expected collection failure because the planned logical-run error codes were absent.
+- Wired exact aggregate preflight before source fetch or storage mutation, blocking corrupt, conflicting, and orphaned completion claims without healing or deleting retained evidence.
+- Collected exact streamed raw/page-manifest evidence after every succeeded page pair, then published or reused one immutable aggregate and performed final full reconciliation before terminal success and `RunSummary` output.
+- Added stable aggregate corrupt/conflict/orphaned/uncertain codes to the existing event shape and exposed the separately verified aggregate key on `ApiIngestionResult` without adding CLI/configuration arguments.
+- Proved first-publication ordering, legacy page-only upgrade, mixed page-manifest run IDs, complete byte-stable replay with preserved `completion_run_id`/`completed_at`, unchanged raw-only `bytes_written` and reused-page-only `duplicate_count`, and retained complete pages after aggregate publication uncertainty.
+- Updated narrow backfill/CLI result fixtures only; backfill still delegates to the single-date primitive and fails fast. Garage integration, exact demo inventory, clean-export counts, and operator documentation remain slices 4–5.
+- Focused service/backfill/aggregate/CLI tests — PASS (110); LSP diagnostics — PASS with no findings; `make lint` — PASS; `make test` — PASS (605 offline tests, 66 integration deselected).
+- `./scripts/verify.sh` — PASS: doctor, policy, locked sync, Ruff, strict mypy, 605 offline tests, and Compose rendering.
+- `make integration` — NOT RUN because slice 4 owns Garage/backfill/demo live evidence. BI-092 remains active and `in_progress`.
+- Next task: execute BI-092 slice 4 only by adding Garage publication/replay/failure coverage, aggregate-required backfill evidence, and exact demo inventory/clean-export updates; do not start BI-093.
+
+## 2026-10-15 — BI-092 slice 4 Garage, backfill, and exact demo inventory
+
+- Added aggregate-aware Garage key cleanup and exact inventory checks for every successful API logical date; both current API sources now prove first publication and complete byte-stable replay while preserving original completion facts and page-only metric meanings.
+- Added live final-page/pre-aggregate interruption and legacy page-only upgrade evidence, mixed page-manifest `run_id` checks, and a standard-storage wrapper that writes exact aggregate bytes to Garage before raising; production exact-key reconciliation accepts the fully verified uncertain write.
+- Added live malformed, noncanonical, conflicting, and orphaned aggregate barriers. Each rerun fails with the stable logical-run code before source mutation and leaves the damaged aggregate and remaining page evidence unchanged.
+- Extended repeated/resumed backfill inventory to require one aggregate per successful date, preserve earlier dates byte-for-byte, and stop before later dates when a middle-date aggregate conflicts.
+- Updated `DemoInventoryVerifier` to require the deterministic aggregate only for successful API records, parse it with the production strict parser, cross-check every raw/page-manifest checksum against independently streamed bytes, and include aggregate bytes in manifest evidence without increasing raw counts.
+- Updated recovery-demo and clean-export exact counts. The isolated clean-export walkthrough passed in 26.18 seconds with a 1.82-second warm happy path, exact counts of 6 raw, 8 manifests, 1 archive, 2 rejected, and 0 landing objects, and verified cleanup.
+- Test-first demo red phase — PASS as evidence: three focused tests failed before the verifier required and validated aggregate evidence. Focused aggregate/service/backfill/demo unit tests — PASS (132); focused API Garage integration — PASS (16); recovery-demo integration — PASS (12); LSP diagnostics — PASS with no findings.
+- `make lint` — PASS; `make test` — PASS (606 offline tests, 73 integration deselected); `make integration` — PASS (73 integration tests plus repeat-seed and infrastructure recovery checks); `./scripts/verify.sh` — PASS with policy, locked sync, static checks, offline tests, and Compose rendering. No dependency, page-manifest schema, CLI, metric meaning, operator-documentation claim, or BI-093 behavior changed.
+- BI-092 remains active and `in_progress`; slice 5 is the only remaining slice. Next task: update current-behavior contracts, REST/backfill and recovery/demo documentation, README wording, run final closeout gates, mark BI-092 done, and select exactly one next task.
+
+## 2026-10-15 — BI-092 slice 5 documentation and acceptance closeout
+
+- Updated the core contract to distinguish unchanged one-payload schema-version-1 manifests from the separate API-specific logical-run aggregate accepted by ADR 0003.
+- Updated the implemented REST/backfill contract with both exact aggregate key examples, `N + N + 1` cardinality, strict fields and 8 MiB bound, preflight mutation barrier, publication-before-success order, exact streamed checksums, complete reconciliation/recovery table, stable aggregate error codes, legacy page-only upgrade, mixed-run replay, unchanged metrics, and aggregate-required fail-fast backfill.
+- Updated README and recovery-demo guidance with aggregate-aware retained/final states, normal recovery actions, strict demo inspection, failed-batch non-completion, and the measured exact inventory of 6 raw, 8 manifests, 1 archive, 2 rejected, and 0 landing objects.
+- Preserved standard-S3 access, immutable sequential redelivery, bounded uncertain-write convergence, no synthetic raw payload, and no exactly-once or concurrent-writer claim. No dependency, CLI/configuration surface, page-manifest schema, raw/page key, or BI-093 behavior changed.
+- Focused aggregate/reconciliation/service/backfill/demo tests — PASS (126); LSP diagnostics over all 14 changed Python paths — PASS with no findings; `make lint` — PASS; `make test` — PASS (606 offline tests, 73 integration deselected); Compose rendering — PASS.
+- `make integration` — PASS: 73 integration tests plus repeat-seed and infrastructure recovery gates. The isolated clean-export walkthrough — PASS in 24.78 seconds with a 1.75-second warm happy path, exact aggregate-aware inventory, redaction, protected-state checks, and verified cleanup.
+- Repository policy, backlog/state synchronization, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included doctor, policy with BI-093 selected, locked sync, Ruff, strict mypy, 606 offline tests, and Compose rendering.
+- Marked BI-092 done and selected BI-093 as the sole next atomic task. Next task: implement BI-093 terminal events and final summaries for backend S3 failures across REST, file, and PostgreSQL snapshot services; do not combine BI-094.
+
+## 2026-10-15 — BI-093 backend-storage failure planning
+
+- Added an implementation-ready five-slice BI-093 plan without changing Python, tests, dependencies, runtime behavior, object/manifest contracts, stored evidence, or accepted ADRs.
+- Confirmed the three current gaps: REST can leak raw Botocore failures past its typed terminal path, file staging and service failures have no source terminal boundary, and snapshot S3 setup occurs outside the descriptor-backed attempt boundary.
+- Planned source-neutral `StorageBackendError` translation with preserved cause chains, source-owned context-managed S3 sessions, exactly one terminal event followed by one `run_summary`, confirmed-only metrics, and no generic CLI duplicate after handled failure.
+- Planned to move file landing staging into the file service attempt and to acquire snapshot storage only after descriptor capture, preserving raw-before-validation, whole-file atomicity, explicit snapshot identity, and all restart-safe evidence semantics.
+- Mapped setup, inspection, read, copy, delete, and write failures across all three sources to focused unit tests and isolated unavailable-endpoint integration, including redaction and exact before/after object-state checks.
+- Refined BI-093 against completed BI-092, marked it `in_progress`, indexed the detailed plan, and synchronized the canonical backlog and state handoff; BI-094 remains explicitly excluded.
+- Checked current Botocore exception guidance through Context7 `/boto/botocore`; no new runtime dependency or ADR is required.
+- `./scripts/doctor.sh`, repository policy, backlog JSON Schema/active-state validation, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked sync, Ruff, formatting, strict mypy over 80 source files, 606 offline tests, and Compose rendering.
+- Active LSP diagnostics over all five changed YAML/Markdown paths — PASS with no findings. `make integration` — NOT RUN because this planning change changed no runtime or infrastructure behavior.
+- Next task: execute BI-093 slice 1 only with failing shared-storage and terminal-contract tests, then the minimal shared normalization/event contracts; do not wire source services or start BI-094.
+
+## 2026-10-15 — BI-093 slice 1 shared normalization and terminal contracts
+
+- Added source-neutral `StorageBackendError` translation for known Botocore client construction, S3 get/put/copy/delete, response-stream, and client-close failures while preserving the original exception through chaining and exposing only a fixed redacted message.
+- Added context-owned `storage_session`, retained distinct missing/conflict/verification/size classifications, closed response bodies, spools, and clients on bounded paths, and left arbitrary programming exceptions outside backend normalization.
+- Added reusable one-shot terminal-pair emission for API, file, and snapshot event forms.
+- Extended the file terminal contract with system-only `failed`, nullable disposition/duplicate fields, stable `storage_failed`/`storage_state_failed` codes, and typed `FileIngestionError` without wiring the file service or changing ADR 0002 business rejection semantics.
+- Test-first red phase — PASS as evidence: focused suites initially failed collection for the new contracts. Focused storage/file/summary and existing source service/CLI tests — PASS (192); `make lint` — PASS; active LSP diagnostics — PASS with no findings.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 80 source files, 615 offline tests with 73 integration tests deselected, and Compose rendering. `make integration` — NOT RUN because source-service wiring and unavailable-S3 acceptance belong to later BI-093 slices.
+- BI-093 remains active and `in_progress`. Next task: execute slice 2 only by adding table-driven REST storage-failure tests, then wire the source-owned storage session and exact terminal pair without starting file/snapshot wiring or BI-094.
+- Final changed-path LSP sweep found no Python diagnostics; Markdown diagnostics reported only the pre-existing cspell false positive `dbe` inside the historical project identifier on `docs/WORKLOG.md:562`, which remains unchanged under the append-only worklog contract.
+
+## 2026-10-15 — BI-093 slice 2 REST storage-failure boundary
+
+- Added table-driven REST attempt tests for storage-session setup/close, aggregate preflight/final verification, page reconciliation/read, raw write, page-manifest write, and bounded aggregate publication failure.
+- The tests assert exactly one failed `api_ingestion` followed by exactly one `run_summary`, stable source date/batch/run IDs, direct `StorageBackendError` chaining, fixed redacted `storage_error`, confirmed-only counters, no success record, and the exact retained key set at every failure point.
+- Moved REST storage-session ownership from the CLI into `ingest_api_date()` after logical identity and `run_id` creation. Terminal success or failure now waits for session exit, while retry events remain non-terminal and source-owned.
+- Preserved ADR 0003 uncertain-write convergence: a fully verified aggregate can still recover a write-then-error result, while unresolved backend failure is surfaced through the storage terminal path without changing page, aggregate, key, metric, or retry contracts.
+- Kept backfill on the same fail-fast single-date primitive; focused evidence shows the failed date emits once, prior dates remain represented, later dates are not attempted, and the backfill layer emits no duplicate date summary.
+- Simplified the REST CLI to inject a context-owned storage-session provider. Attempted S3 setup failures now return handled exit `4` with only the source terminal pair; non-storage HTTP setup/cleanup failures retain generic runtime exit `5` and one redacted `cli_error`.
+- Test-first red phase — PASS as evidence: the nine service cases initially failed because `storage_session_provider` was not implemented. Focused API service/backfill/logical-run/CLI tests — PASS (67); `make test` — PASS (625 offline tests, 73 integration deselected); `make lint` — PASS; active LSP diagnostics over all six changed Python paths — PASS with no findings.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 80 source files, 625 offline tests with 73 integration tests deselected, and Compose rendering. `make integration` — NOT RUN because isolated unavailable-S3 acceptance across REST, file, and snapshot commands belongs to slice 4.
+- BI-093 remains active and `in_progress`. Next task: execute slice 3 only by moving file landing staging and storage ownership into the file-service attempt under table-driven storage-failure tests; do not start snapshot wiring, live unavailable-S3 acceptance, or BI-094.
+
+## 2026-10-15 — BI-093 slice 3 file storage-failure boundary
+
+- Added table-driven file-attempt tests for storage-session setup/close, landing staging, landing/raw download, payload/manifest reconciliation, exact disposition inspection, canonical raw and terminal manifest writes, and disposition copy/delete failures.
+- Each backend case asserts exactly one `file_ingestion` outcome `failed` followed by exactly one `run_summary`, stable source date/batch/run IDs, direct `StorageBackendError` chaining, redacted output, confirmed-only counters, nullable pre-validation facts, and exact retained keys.
+- Moved production CLI landing staging and S3-session ownership into `ingest_file_delivery()` after bounded local admission; terminal accepted/rejected/failure output is delayed until session exit, and `resume` uses the same service without a staging stream.
+- Added the typed `storage_state_failed` terminal path for missing/conflicting/non-convergent evidence while preserving the underlying storage cause. Arbitrary fake/programming `RuntimeError` defects remain unclassified and emit no misleading terminal pair.
+- Preserved raw-before-validation, ADR 0002 whole-file counters, immutable manifest ordering, same-name/renamed duplicate classification, and copy-verify-delete restart states. The private file-move demo worker now delegates its admitted stream to the same service-owned staging path.
+- Updated the file CLI to return handled exit `4` for an already emitted `FileIngestionError` without appending a generic `cli_error`; non-storage runtime setup/cleanup fallback remains exit `5`.
+- Test-first red phase — PASS as evidence: 14 focused cases initially failed because the service lacked session/staging arguments and direct state failures were not normalized. Focused file/validation/contract/demo tests — PASS (181); `make lint` — PASS; `make test` — PASS (637 offline tests, 73 integration deselected); active LSP diagnostics over all six changed Python paths — PASS with no findings.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 80 source files, 637 offline tests with 73 integration tests deselected, and Compose rendering. `make integration` — NOT RUN because isolated unavailable-S3 acceptance belongs to slice 4; the file interruption integration assertion was updated for the typed cause chain but not executed in this slice.
+- BI-093 remains active and `in_progress`; canonical backlog status and active task remain unchanged. Next task: execute slice 4 only by wiring the snapshot attempt boundary and isolated unavailable-S3 acceptance for all three sources; do not start BI-094 or slice-5 documentation closeout.
+
+## 2026-10-16 — BI-093 slice 4 snapshot boundary and unavailable-S3 acceptance
+
+- Added table-driven snapshot tests for storage-session setup/close, reconciliation, raw write, and manifest write failures. Each case proves descriptor capture precedes storage, one `snapshot_failed` plus one final summary, stable IDs, direct `StorageBackendError` chaining, confirmed-only counters, exact retained state, and redaction.
+- Proved descriptor mismatch fails before S3 acquisition with no provisional batch ID or terminal summary, while arbitrary non-storage fake defects remain runtime failures rather than being mislabeled as outages.
+- Moved snapshot S3-session ownership into `ingest_order_snapshot()` after descriptor capture/revalidation and `snapshot_started`; success is delayed until clean session exit, and the typed handled error records its already emitted event/summary for duplicate-free CLI handling.
+- Narrowed snapshot chunk helper translation from broad `Exception` to `StorageError`, preserving reconciliation/conflict codes and allowing process-boundary/programming failures to remain unhandled without changing payload-only restart recovery.
+- Added isolated loopback-unavailable command acceptance for REST, file, and snapshot with one short Botocore attempt, unique exact keys, before/after absence checks, bounded execution, exit `4`, exact terminal cardinality, complete summaries, and credential/DSN/endpoint/payload redaction.
+- Updated the `s3-unavailable` recovery demo to require one failed API terminal event plus one summary and handled exit `4` before recovery through the unchanged normal API command.
+- Test-first red phase — PASS as evidence: focused snapshot cases initially failed because the service had no storage-session provider and handled errors carried no terminal evidence. Focused snapshot CLI/service and demo tests — PASS (63); isolated unavailable-S3 tests — PASS (3); focused snapshot integration — PASS (5); focused recovery demo — PASS (1).
+- `make lint` — PASS; `make test` — PASS (643 offline tests, 76 integration deselected); active LSP diagnostics over all seven changed Python paths — PASS with no findings; Compose rendering — PASS.
+- `make integration` — PASS (76 integration tests plus repeat-seed and infrastructure recovery checks); `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 643 offline tests, and Compose rendering.
+- BI-093 remains active and `in_progress`; backlog status and active task are unchanged. Next task: execute slice 5 only by updating operator/contracts documentation, removing superseded BI-093 limitations, running final closeout gates, and closing BI-093 without starting BI-094.
+
+## 2026-10-16 — BI-093 slice 5 documentation and acceptance closeout
+
+- Updated the core and shared-storage contracts with source-owned attempt boundaries, redacted Botocore normalization, exact terminal-event then `run_summary` ordering, handled exit `4`, confirmed-only counters, exception chaining, and retained-evidence recovery.
+- Updated REST, file, and PostgreSQL snapshot operator contracts with their exact setup/operation/close boundaries, stable `storage_error`/`storage_failed`/`storage_state_failed` codes, nullable pre-validation facts, no duplicate `cli_error`, and unchanged durable manifest semantics.
+- Updated README and recovery-demo guidance for the proven unavailable-S3 behavior across all three production commands; removed obsolete BI-093 gap and exit-5 wording while retaining the separate BI-094 response-stream deadline limitation.
+- Changed no runtime code, dependency, object key, schema, retry budget, file atomicity, REST aggregate rule, or delivery guarantee in slice 5.
+- Focused storage/API/file/snapshot/demo tests — PASS (176); active LSP diagnostics over all 37 changed Python paths — PASS with no findings; `make lint` — PASS; `make test` — PASS (643 offline tests, 76 integration deselected); Compose rendering — PASS.
+- Isolated unavailable-S3 acceptance — PASS (3 commands); `make integration` — PASS (76 tests plus repeat-seed and infrastructure recovery); isolated clean-export — PASS in 26.97 seconds with a 2.04-second warm happy path, exact inventory, redaction, protected-state checks, and verified cleanup.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 643 offline tests, and Compose rendering.
+- Marked BI-093 done and selected BI-094 as the sole next atomic task. Next task: add deterministic slow-trickle tests, then enforce the REST total response deadline without changing retry, raw-preservation, or terminal-output contracts.
