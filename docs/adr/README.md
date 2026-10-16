@@ -15,6 +15,7 @@ ADRs record decisions that affect architecture, delivery semantics, or project r
 | --- | --- | --- |
 | [0001](0001-use-garage-for-s3-compatible-storage.md) | Accepted | Use Garage `dxflrs/garage:v2.4.1` for local S3-compatible object storage |
 | [0002](0002-use-whole-file-atomicity-for-file-ingestion.md) | Accepted | Reject a delivered file as a whole when any required validation fails |
+| [0003](0003-persist-rest-logical-run-manifest.md) | Accepted | Persist one immutable REST logical-run manifest at a deterministic batch key |
 
 ## A new ADR is required for
 
