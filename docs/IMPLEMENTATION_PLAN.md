@@ -215,6 +215,19 @@ Detailed execution plan: [`docs/plans/BI-095.md`](plans/BI-095.md).
 
 Outcome: local initialization and preflight cannot report success for a dotenv mapping that the application's own configuration loader rejects, without adding connectivity checks or weakening credential-file safety.
 
+## Maintenance — clean-commit core reproducibility attestation (`BI-096`)
+
+Detailed execution plan: [`docs/plans/BI-096.md`](plans/BI-096.md).
+
+- select one immutable full commit ID and create a separate detached checkout without copying developer-worktree files;
+- record exact commit/tree provenance, empty initial status, a canonical source-inventory digest, and closure of every path named by `BI-090-F01`;
+- run repository gates and an isolated integration suite from the candidate checkout;
+- run the bounded clean-export walkthrough through locked setup, seed, four demos, offline tests, and exact inspection;
+- prove exact cleanup, unchanged protected-resource fingerprints, and continued historical classification of the original BI-090 dirty baseline;
+- publish only documentation and evidence, with no product behavior, dependency, contract, ADR, or delivery-claim change.
+
+Outcome: the completed core source set is reproducible from one exact clean committed checkout, while the original BI-090 baseline remains truthfully classified as a dirty worktree.
+
 ## Common quality gates
 
 For every gate:

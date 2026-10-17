@@ -316,7 +316,7 @@ tasks:
 
   - id: BI-096
     title: Attest clean-commit core reproducibility
-    status: todo
+    status: in_progress
     depends_on: [BI-090]
     scope:
       - Resolve the remaining BI-090-F01 follow-up by validating the completed audited source set from an exact named clean committed checkout.

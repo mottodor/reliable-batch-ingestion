@@ -821,3 +821,38 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `make integration` — PASS with 76 integration tests, repeat-seed verification, and infrastructure persistence/reset recovery; isolated clean-export — PASS in 44.37 seconds with a 2.13-second warm happy path, exact inspection, redaction, protected-state checks, and verified cleanup.
 - `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests, and Compose rendering.
 - Marked BI-095 done, selected BI-096 as the sole next atomic task, and synchronized the backlog/state handoff. Next task: execute BI-096 only; do not change product behavior.
+
+## 2026-10-17 — BI-096 clean-commit attestation planning
+
+- Added an execution-ready two-slice BI-096 plan without changing product code, tests, dependencies, runtime behavior, object/manifest contracts, README behavior, or accepted ADRs.
+- Fixed the evidence identity to one full immutable commit ID and a separate detached worktree; developer-worktree files, untracked audit content, mutable branch names, and copy-based source assembly cannot become attested input.
+- Defined exact provenance through commit/tree IDs, a zero-byte initial status, empty diffs, canonical NUL-safe Git-tree inventory count/digest, tool versions, and an explicit matrix for every source/test/operator path absent from the frozen BI-090 baseline.
+- Planned candidate-checkout repository gates, separately isolated `make integration`, and the complete clean-export sequence through locked setup, doctor, Compose, seed, all four demos, offline tests, and exact final inspection.
+- Fixed cleanup evidence for task-owned containers, networks, volumes, image tags, environment files, and the detached checkout, plus before/after fingerprints for all three protected default-project volumes.
+- Required a new BI-096 report to preserve `BI-090-F01` and the original `a1ef506f...` `dirty_worktree` classification rather than retroactively rewriting historical audit evidence.
+- Planning inspection found current clean commit candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b`, 170 committed paths, no untracked paths, and representative F01-required paths at `HEAD`; execution must reproduce these facts independently and may select a later exact commit.
+- Marked BI-096 `in_progress`, indexed the detailed plan, and synchronized the canonical backlog/state handoff.
+- Planning startup `./scripts/doctor.sh` — PASS with Python 3.12, uv, Git, Docker, and Docker Compose available.
+- Planning closeout backlog JSON Schema/state validation, repository policy, and `git diff --check` — PASS; active LSP diagnostics over all five changed YAML/Markdown paths — PASS with no findings.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests with 76 integration tests deselected, and Compose rendering. `make integration` and the clean-export walkthrough were NOT RUN because this planning change altered no runtime behavior; both remain mandatory BI-096 execution gates.
+- Next task: execute BI-096 slice 1 only; do not start live infrastructure attestation until the exact commit, clean checkout, canonical inventory, F01 path closure, and repository gates pass.
+
+## 2026-10-17 — BI-096 slice 1 failed candidate attestation
+
+- Selected exact candidate commit `5ee3781f8955e109b6890b117b9070fdd718ad5b` and created `/tmp/bi096-5ee3781f8955-slice1` directly with `git worktree add --detach`; no developer-worktree file was copied into it.
+- Recorded tree `3a17d76af2afb4fe247108238af6650c57ce2668`, zero-byte initial status/index/worktree diffs, a safe 170-blob canonical NUL inventory with SHA-256 `737d4dd048c24f4a77c1bbbaa5b8b5662bf2585ba4104562b1642ba4150fd3ba`, and exact committed object IDs for all 19 F01-required paths.
+- Candidate doctor, repository policy, corrected backlog JSON Schema/state validation, `git diff --check`, and `uv sync --locked --all-groups` — PASS. The first backlog-validator invocation failed because the ignored audit helper had a syntax typo; that log was retained, only the helper was corrected, and the retry passed.
+- `make lint` — FAIL under locked Ruff 0.17.0 with `I001` import-group findings in `tests/unit/test_api_retry.py` and `tests/unit/test_api_sources.py`. No candidate source or test was repaired, formatted, or otherwise changed.
+- Per the slice-1 stop rule, `make test`, Compose rendering, `./scripts/verify.sh`, isolated `make integration`, clean export, exact object inspection, and protected-volume fingerprinting were NOT RUN.
+- Rechecked the candidate at the same full commit with zero-byte status and diffs, removed the exact detached worktree, and retained ignored logs/inventory under `artifacts/audit/BI-096/slice1/`.
+- Added `docs/audits/BI-096.md` with a `fail` verdict for this candidate, complete provenance/source closure, first-failure evidence, explicit NOT RUN rows, cleanup, historical boundary, and unchanged delivery limitations. `docs/audits/BI-090.md` remains unmodified.
+- Documentation-worktree `./scripts/verify.sh` — PASS with repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests, and Compose rendering. It reused that worktree's existing Ruff cache and does not supersede the fresh detached-checkout lint failure.
+- BI-096 remains `in_progress`. Next task: obtain explicit authorization for a bounded rescope or separate test-only maintenance correction, create a new immutable commit, and rerun slice 1 from a fresh detached checkout; do not start slice 2 from the failed candidate.
+
+## 2026-10-17 — BI-096 authorized lint correction
+
+- The project owner explicitly authorized the proposed bounded next step after the failed candidate; this rescope does not authorize runtime, assertion, dependency, configuration, contract, ADR, or delivery-semantics changes.
+- Consulted current Ruff guidance through Context7 `/astral-sh/ruff`: standard-library, third-party, and first-party imports are separate sections, and configured source roots identify project modules as first-party.
+- Changed only import-group whitespace in `tests/unit/test_api_retry.py` and `tests/unit/test_api_sources.py`; no test assertion or executable behavior changed.
+- `uv run ruff check --no-cache tests/unit/test_api_retry.py tests/unit/test_api_sources.py` — PASS; focused pytest — PASS with 67 tests; active LSP diagnostics — PASS with no findings.
+- Next task: commit the bounded correction and accumulated BI-096 evidence as one immutable revision, then repeat the complete slice-1 provenance, source-closure, and repository-gate sequence from a fresh detached checkout.

@@ -1,10 +1,10 @@
 # Project state
 
-Updated: 2026-10-16
+Updated: 2026-10-17
 
 ## Current stage
 
-The core lab through BI-080 remains implemented, and BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and its findings have bounded follow-up tasks. BI-091 and BI-092 are complete: ADR 0003 now has a fully implemented, tested, and documented REST logical-run manifest contract, closing the BI-090-F02 follow-up without reopening completed product tasks or adding Possible extensions. BI-093 is complete: shared backend-error normalization and source-owned terminal boundaries now give identified REST, file, and snapshot storage failures one redacted terminal event plus one final summary, with confirmed-only counters, handled exit `4`, retained evidence, operator documentation, and isolated unavailable-S3 acceptance across all three commands. BI-094 is complete: the total REST page deadline now covers unbuffered successful-body transport chunks, with deterministic fetcher/service cleanup, no-partial-persistence, stable terminal-output evidence, current operator documentation, and full live/clean-export regression acceptance. BI-095 is complete: local preflight delegates the full application surface to `AppConfig.from_env()` while retaining separate Compose-only checks, and the atomic initializer now has explicit full-validation failure, redaction, cleanup, and byte-stable rerun acceptance. BI-096 is selected next.
+The core lab through BI-080 remains implemented, and BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and its findings have bounded follow-up tasks. BI-091 and BI-092 are complete: ADR 0003 now has a fully implemented, tested, and documented REST logical-run manifest contract, closing the BI-090-F02 follow-up without reopening completed product tasks or adding Possible extensions. BI-093 is complete: shared backend-error normalization and source-owned terminal boundaries now give identified REST, file, and snapshot storage failures one redacted terminal event plus one final summary, with confirmed-only counters, handled exit `4`, retained evidence, operator documentation, and isolated unavailable-S3 acceptance across all three commands. BI-094 is complete: the total REST page deadline now covers unbuffered successful-body transport chunks, with deterministic fetcher/service cleanup, no-partial-persistence, stable terminal-output evidence, current operator documentation, and full live/clean-export regression acceptance. BI-095 is complete: local preflight delegates the full application surface to `AppConfig.from_env()` while retaining separate Compose-only checks, and the atomic initializer now has explicit full-validation failure, redaction, cleanup, and byte-stable rerun acceptance. BI-096 planning is complete, but its first slice-1 candidate stopped at a required gate: commit `5ee3781f8955e109b6890b117b9070fdd718ad5b` had clean detached provenance, a verified 170-path inventory, and all 19 F01 paths, while locked `make lint` failed on two committed test import groups. Live attestation was not started. The project owner then authorized the bounded proposed correction: only import-group whitespace changed in those two tests, focused no-cache Ruff and 67 tests pass, and BI-096 remains in progress until a new immutable commit passes the complete detached slice-1 rerun.
 
 ```yaml
 active_task_id: BI-096
@@ -173,11 +173,12 @@ last_completed_task_id: BI-095
 - BI-095 slice 2 proves that full-validation failure publishes no absent target, preserves placeholder and initialized target bytes, removes temporary siblings, emits no success message, and discloses neither generated nor invalid values;
 - valid initializer reruns execute the same complete preflight, preserve exact bytes and mode `0600`, and never regenerate credentials;
 - Make help and README now distinguish complete application validation from Compose-only port, Garage RPC-secret, and placeholder checks, and explicitly make no connectivity, credential-acceptance, readiness, or `SOURCE_SEED` claim;
-- the complete BI-095 focused, offline, integration, clean-export, LSP, policy, and verification matrix passes, so BI-095 is done and BI-096 is selected.
+- the complete BI-095 focused, offline, integration, clean-export, LSP, policy, and verification matrix passes, so BI-095 is done and BI-096 is selected;
+- BI-096 has an execution-ready two-slice plan covering immutable commit selection, a separate clean detached checkout, canonical Git-tree inventory, exact F01 path closure, repository gates, isolated integration, the full clean-export walkthrough, exact final inventory, bounded cleanup, protected fingerprints, and a documentation-only attestation report.
 
 ## Not completed
 
-- BI-096: attest the completed source set from an exact clean committed checkout.
+- BI-096: candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b` failed the required lint gate after provenance and source closure passed; repository verification, isolated integration, clean export, exact inspection, and protected-state evidence remain unexecuted for an acceptable clean commit.
 
 ## Known limitations and risks
 
@@ -189,15 +190,17 @@ last_completed_task_id: BI-095
 
 ## Latest validation
 
-2026-10-16, BI-095 slice 2 closeout:
+2026-10-17, BI-096 slice 1:
 
-- the documentation assertion failed first against the old Make/README wording; the expanded initializer suite then passed 28 focused tests with absent-target, placeholder-target, initialized-target, redaction, cleanup, full-preflight, mode-`0600`, byte-stability, and no-regeneration evidence;
-- focused preflight/configuration tests — PASS (82); `make lint` — PASS with Ruff, formatting, and strict mypy over 81 source files;
-- `make test` — PASS with 682 offline tests and 76 integration tests deselected; active LSP diagnostics for the changed Python test path — PASS with no findings;
-- Compose rendering — PASS; `make integration` — PASS with 76 integration tests, repeat-seed verification, and infrastructure persistence/reset recovery;
-- isolated clean-export walkthrough — PASS in 44.37 seconds with a 2.13-second warm happy path, exact inspection, redaction, protected-state checks, and verified cleanup;
-- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy, 682 offline tests, and Compose rendering.
+- candidate commit `5ee3781f8955e109b6890b117b9070fdd718ad5b`, tree `3a17d76af2afb4fe247108238af6650c57ce2668`, began and ended with zero-byte status and diffs in a separate detached checkout;
+- the canonical NUL-safe 170-path inventory has SHA-256 `737d4dd048c24f4a77c1bbbaa5b8b5662bf2585ba4104562b1642ba4150fd3ba`; all 19 F01-required snapshot, demo, clean-export, test, operator-document, and plan paths resolved as committed blobs;
+- doctor, repository policy, corrected backlog-schema/state validation, `git diff --check`, and `uv sync --locked --all-groups` — PASS;
+- `make lint` — FAIL with Ruff 0.17.0 `I001` findings in `tests/unit/test_api_retry.py` and `tests/unit/test_api_sources.py`; no candidate file was changed;
+- `make test`, Compose rendering, `./scripts/verify.sh`, `make integration`, clean export, exact live inspection, and protected-resource fingerprints — NOT RUN because the slice-1 stop rule applied;
+- the clean detached checkout was removed after evidence capture; the failed attestation and ignored logs are recorded in `docs/audits/BI-096.md` and `artifacts/audit/BI-096/slice1/`;
+- documentation-worktree `./scripts/verify.sh` — PASS with 682 offline tests and 76 integration tests deselected, but it reused the existing Ruff cache and is not substituted for the fresh detached-checkout lint failure;
+- owner-authorized import grouping in `tests/unit/test_api_retry.py` and `tests/unit/test_api_sources.py` — PASS under `ruff check --no-cache`; both focused files pass all 67 tests and active LSP diagnostics report no findings.
 
 ## Next atomic step
 
-Execute BI-096 only: attest the completed source set from an exact named clean committed checkout without changing product behavior.
+Commit the bounded BI-096 correction and evidence as one immutable revision, then rerun the complete BI-096 slice 1 from a fresh detached checkout before any live slice-2 command.
