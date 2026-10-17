@@ -4,6 +4,7 @@ from datetime import date
 from typing import Any
 
 import pytest
+
 from batch_ingestion.api.sources import (
     PageValidationError,
     api_page_identity,
@@ -11,7 +12,6 @@ from batch_ingestion.api.sources import (
     page_payload_name,
     validate_page_envelope,
 )
-
 from batch_ingestion.identifiers import SourceType, derive_batch_id, raw_object_key
 
 SOURCE_DATE = date(2026, 9, 1)
