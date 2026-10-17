@@ -13,22 +13,17 @@ SCHEMA_SQL = POSTGRES_INIT / "001_omni_retail_schema.sql"
 SEED_SQL = POSTGRES_INIT / "002_seed_orders.sql"
 MAKEFILE_PATH = REPOSITORY_ROOT / "Makefile"
 
-VALID_INFRASTRUCTURE_ENV = """\
-POSTGRES_PORT=5432
-POSTGRES_DB=batch_lab
-POSTGRES_USER=batch_lab
-POSTGRES_PASSWORD=local-password
-S3_PORT=3900
-S3_BUCKET=batch-lab
-S3_ACCESS_KEY=local-access-key
-S3_SECRET_KEY=local-secret-key
-S3_TOTAL_MAX_ATTEMPTS=3
-S3_CONNECT_TIMEOUT_SECONDS=2
-S3_READ_TIMEOUT_SECONDS=5
-GARAGE_ADMIN_PORT=3903
-GARAGE_RPC_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-MOCK_API_PORT=8080
-"""
+VALID_LOCAL_ENV = (
+    (REPOSITORY_ROOT / ".env.example")
+    .read_text(encoding="utf-8")
+    .replace("POSTGRES_PASSWORD=change-me", "POSTGRES_PASSWORD=local-password")
+    .replace("S3_ACCESS_KEY=change-me", "S3_ACCESS_KEY=local-access-key")
+    .replace("S3_SECRET_KEY=change-me", "S3_SECRET_KEY=local-secret-key")
+    .replace(
+        "GARAGE_RPC_SECRET=change-me-64-character-hex-value",
+        "GARAGE_RPC_SECRET=" + "0123456789abcdef" * 4,
+    )
+)
 
 
 def test_versioned_postgres_scripts_are_ordered_and_explicit() -> None:
@@ -94,7 +89,7 @@ def _run_seed(
     fail_psql: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     env_path = tmp_path / ".env"
-    env_path.write_text(VALID_INFRASTRUCTURE_ENV, encoding="utf-8")
+    env_path.write_text(VALID_LOCAL_ENV, encoding="utf-8")
     record_path = tmp_path / "compose-arguments.txt"
     recorder = _write_compose_recorder(tmp_path, fail_psql=fail_psql)
     environment = os.environ.copy()

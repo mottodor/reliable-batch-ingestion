@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./backlog.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-094
+active_task_id: BI-096
 
 status_values:
   - todo
@@ -290,7 +290,7 @@ tasks:
 
   - id: BI-094
     title: Enforce the REST total response deadline
-    status: todo
+    status: done
     depends_on: [BI-090]
     scope:
       - Resolve BI-090-F04 by enforcing the configured monotonic elapsed deadline while streaming successful HTTP response bodies.
@@ -303,7 +303,7 @@ tasks:
 
   - id: BI-095
     title: Align local preflight with application configuration
-    status: todo
+    status: done
     depends_on: [BI-090]
     scope:
       - Resolve BI-090-F05 by making initialization/preflight and README claims cover the same configuration surface.

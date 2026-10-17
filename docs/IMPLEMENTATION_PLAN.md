@@ -191,6 +191,30 @@ Detailed execution plan: [`docs/plans/BI-093.md`](plans/BI-093.md).
 
 Outcome: temporary S3 failure remains bounded and restart-safe while every attempted source ingestion retains complete, secret-free terminal observability.
 
+## Maintenance — REST total response deadline (`BI-094`)
+
+Detailed execution plan: [`docs/plans/BI-094.md`](plans/BI-094.md).
+
+- consume successful response bodies as unbuffered HTTPX transport chunks so fixed-size iterator buffering cannot hide elapsed time;
+- check the one-page monotonic budget immediately before and after every transport receive and before accepting end-of-stream;
+- retain the existing response-size ceiling, per-operation timeouts, retry classifications, raw-before-parse ordering, and resource ownership;
+- prove slow-trickle termination with an in-memory fake clock and stream, including response/spool cleanup, no partial S3 write, and exact terminal output;
+- rerun normal chunked, 429, retry-budget, malformed-body, backfill, live API, and clean-export regressions.
+
+Outcome: one successful-response body cannot be kept alive indefinitely by below-read-timeout byte trickles, while existing REST evidence and recovery contracts remain unchanged.
+
+## Maintenance — full local configuration preflight (`BI-095`)
+
+Detailed execution plan: [`docs/plans/BI-095.md`](plans/BI-095.md).
+
+- delegate application-level local preflight to the complete redacting `AppConfig.from_env()` validation path;
+- retain non-overlapping Compose-only port, Garage RPC-secret, and recognized-placeholder checks;
+- reject missing, malformed, protocol-invalid, and cross-field-invalid PostgreSQL, S3, HTTP, file, snapshot, and logging settings before reporting success;
+- preserve owner-only atomic publication, symlink/tracked-file refusal, placeholder limits, no partial credential rotation, redaction, and byte-stable valid reruns;
+- prove invalid generated content is never published, then align Make/README wording and rerun offline, integration, and clean-export acceptance.
+
+Outcome: local initialization and preflight cannot report success for a dotenv mapping that the application's own configuration loader rejects, without adding connectivity checks or weakening credential-file safety.
+
 ## Common quality gates
 
 For every gate:

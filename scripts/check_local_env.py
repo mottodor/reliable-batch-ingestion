@@ -1,31 +1,26 @@
 #!/usr/bin/env python3
 """Validate local Compose configuration without exposing credential values."""
 
-import math
 import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-REQUIRED_VARIABLES = (
-    "POSTGRES_PORT",
-    "POSTGRES_DB",
-    "POSTGRES_USER",
-    "POSTGRES_PASSWORD",
+from batch_ingestion.config import AppConfig, ConfigurationError
+
+LOCAL_REQUIRED_VARIABLES = (
     "S3_PORT",
-    "S3_BUCKET",
-    "S3_ACCESS_KEY",
-    "S3_SECRET_KEY",
-    "S3_TOTAL_MAX_ATTEMPTS",
-    "S3_CONNECT_TIMEOUT_SECONDS",
-    "S3_READ_TIMEOUT_SECONDS",
     "GARAGE_ADMIN_PORT",
     "GARAGE_RPC_SECRET",
     "MOCK_API_PORT",
 )
-PORT_VARIABLES = ("POSTGRES_PORT", "S3_PORT", "GARAGE_ADMIN_PORT", "MOCK_API_PORT")
-POSITIVE_INTEGER_VARIABLES = ("S3_TOTAL_MAX_ATTEMPTS",)
-POSITIVE_FLOAT_VARIABLES = ("S3_CONNECT_TIMEOUT_SECONDS", "S3_READ_TIMEOUT_SECONDS")
+LOCAL_PORT_VARIABLES = ("S3_PORT", "GARAGE_ADMIN_PORT", "MOCK_API_PORT")
+PLACEHOLDER_VARIABLES = (
+    "POSTGRES_PASSWORD",
+    "S3_ACCESS_KEY",
+    "S3_SECRET_KEY",
+    "GARAGE_RPC_SECRET",
+)
 RPC_SECRET_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 
 
@@ -57,17 +52,21 @@ def read_env(path: Path) -> tuple[dict[str, str], list[str]]:
 
 
 def validate_environment(values: Mapping[str, str]) -> list[str]:
-    """Validate required infrastructure values while naming variables only."""
+    """Validate complete application and local-only settings without exposing values."""
     errors: list[str] = []
 
-    for name in REQUIRED_VARIABLES:
-        value = values.get(name, "")
-        if not value:
+    for name in LOCAL_REQUIRED_VARIABLES:
+        if not values.get(name, ""):
             errors.append(f"{name} is required")
-        elif "change-me" in value.lower():
-            errors.append(f"{name} still contains a placeholder")
 
-    for name in PORT_VARIABLES:
+    placeholder_names: set[str] = set()
+    for name in PLACEHOLDER_VARIABLES:
+        value = values.get(name, "")
+        if value and "change-me" in value.lower():
+            errors.append(f"{name} still contains a placeholder")
+            placeholder_names.add(name)
+
+    for name in LOCAL_PORT_VARIABLES:
         value = values.get(name, "")
         if not value:
             continue
@@ -79,33 +78,18 @@ def validate_environment(values: Mapping[str, str]) -> list[str]:
         if not 1 <= port <= 65535:
             errors.append(f"{name} must be between 1 and 65535")
 
-    for name in POSITIVE_INTEGER_VARIABLES:
-        value = values.get(name, "")
-        if not value:
-            continue
-        try:
-            parsed_integer = int(value)
-        except ValueError:
-            errors.append(f"{name} must be a positive integer")
-            continue
-        if parsed_integer <= 0:
-            errors.append(f"{name} must be a positive integer")
-
-    for name in POSITIVE_FLOAT_VARIABLES:
-        value = values.get(name, "")
-        if not value:
-            continue
-        try:
-            parsed_float = float(value)
-        except ValueError:
-            errors.append(f"{name} must be a positive number")
-            continue
-        if not math.isfinite(parsed_float) or parsed_float <= 0:
-            errors.append(f"{name} must be a positive number")
-
     rpc_secret = values.get("GARAGE_RPC_SECRET", "")
-    if rpc_secret and RPC_SECRET_PATTERN.fullmatch(rpc_secret) is None:
+    if (
+        rpc_secret
+        and "GARAGE_RPC_SECRET" not in placeholder_names
+        and RPC_SECRET_PATTERN.fullmatch(rpc_secret) is None
+    ):
         errors.append("GARAGE_RPC_SECRET must be exactly 64 hexadecimal characters")
+
+    try:
+        AppConfig.from_env(values)
+    except ConfigurationError as error:
+        errors.append(str(error))
 
     return errors
 

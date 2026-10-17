@@ -43,10 +43,10 @@ fixtures: ## Regenerate the committed supplier corpus for SOURCE_SEED
 fixtures-check: ## Compare two regenerations with the committed supplier corpus
 	$(UV) run python scripts/check_fixtures.py --committed fixtures
 
-init-local-env: ## Initialize recognized placeholders in the ignored local environment
+init-local-env: ## Initialize placeholders and validate complete local configuration
 	@$(UV) run python scripts/init_local_env.py "$(COMPOSE_ENV_FILE)"
 
-check-local-env: ## Validate ignored local infrastructure configuration
+check-local-env: ## Validate complete application and Compose-only local settings
 	@$(UV) run python scripts/check_local_env.py $(COMPOSE_ENV_FILE) 1>&2
 
 ingest-api: check-local-env ## Run one REST date or inclusive backfill with ARGS="..."

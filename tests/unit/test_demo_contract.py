@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 import scripts.demo_faults
 import scripts.demo_worker
+import scripts.init_local_env as init_local_env_module
 from scripts.demo import (
     RECOVERY_SCENARIOS,
     ArtifactRelativePath,
@@ -62,6 +63,7 @@ from batch_ingestion.manifests import Manifest, ManifestStatus
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE_PATH = REPOSITORY_ROOT / "Makefile"
+README_PATH = REPOSITORY_ROOT / "README.md"
 EXAMPLE_ENV_PATH = REPOSITORY_ROOT / ".env.example"
 
 SECRET_VARIABLES = (
@@ -80,6 +82,37 @@ def _assignments(content: str) -> dict[str, str]:
         for name, separator, value in [line.partition("=")]
         if separator
     }
+
+
+def _replace_setting(content: str, name: str, value: str) -> str:
+    prefix = f"{name}="
+    lines = content.splitlines(keepends=True)
+    matches = [index for index, line in enumerate(lines) if line.startswith(prefix)]
+    assert len(matches) == 1
+    index = matches[0]
+    newline = "\n" if lines[index].endswith("\n") else ""
+    lines[index] = f"{name}={value}{newline}"
+    return "".join(lines)
+
+
+def _initialized_environment(content: str) -> tuple[str, dict[str, str]]:
+    generated = {
+        "POSTGRES_PASSWORD": "generated-postgres-sentinel",
+        "S3_ACCESS_KEY": "generated-access-sentinel",
+        "S3_SECRET_KEY": "generated-storage-sentinel",
+        "GARAGE_RPC_SECRET": "0123456789abcdef" * 4,
+    }
+    initialized = content
+    placeholders = {
+        "POSTGRES_PASSWORD": "change-me",
+        "S3_ACCESS_KEY": "change-me",
+        "S3_SECRET_KEY": "change-me",
+        "GARAGE_RPC_SECRET": "change-me-64-character-hex-value",
+    }
+    for name, placeholder in placeholders.items():
+        initialized = _replace_setting(initialized, name, generated[name])
+        assert placeholder not in _assignments(initialized)[name]
+    return initialized, generated
 
 
 def test_make_exposes_exact_demo_surface_with_preflight_and_forwarding() -> None:
@@ -110,6 +143,24 @@ def test_make_exposes_exact_demo_surface_with_preflight_and_forwarding() -> None
     assert '--project-name "$(COMPOSE_PROJECT_NAME)"' in makefile
 
 
+def test_make_and_readme_describe_the_exact_pure_preflight_surface() -> None:
+    makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+    readme = README_PATH.read_text(encoding="utf-8")
+
+    assert (
+        "init-local-env: ## Initialize placeholders and validate complete local configuration"
+        in makefile
+    )
+    assert (
+        "check-local-env: ## Validate complete application and Compose-only local settings"
+        in makefile
+    )
+    assert "PostgreSQL, S3, HTTP, file, snapshot, and logging settings" in readme
+    assert "Compose-only ports, Garage RPC secret, and recognized placeholders" in readme
+    assert "does not contact services or prove that credentials are accepted" in readme
+    assert "SOURCE_SEED" in readme
+
+
 def test_initializer_creates_owner_only_file_and_prints_no_values(tmp_path: Path) -> None:
     target = tmp_path / ".env"
     messages: list[str] = []
@@ -135,27 +186,45 @@ def test_initializer_creates_owner_only_file_and_prints_no_values(tmp_path: Path
 
 def test_initializer_replaces_only_recognized_placeholders_and_is_idempotent(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     target = tmp_path / ".env"
     target.write_bytes(EXAMPLE_ENV_PATH.read_bytes())
+    preflight_paths: list[Path] = []
+
+    def full_preflight(path: Path) -> None:
+        init_local_env_module._default_preflight(path)
+        preflight_paths.append(path)
 
     first = initialize_local_environment(
         example_path=EXAMPLE_ENV_PATH,
         target_path=target,
         is_tracked=lambda _: False,
+        preflight=full_preflight,
         output=lambda _: None,
     )
     initialized = target.read_bytes()
+
+    def reject_regeneration() -> dict[str, str]:
+        pytest.fail("valid rerun must not regenerate credentials")
+
+    monkeypatch.setattr(init_local_env_module, "_generated_values", reject_regeneration)
     second = initialize_local_environment(
         example_path=EXAMPLE_ENV_PATH,
         target_path=target,
         is_tracked=lambda _: False,
+        preflight=full_preflight,
         output=lambda _: None,
     )
 
     assert first.changed is True
     assert second.changed is False
     assert target.read_bytes() == initialized
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert len(preflight_paths) == 2
+    assert preflight_paths[0].parent == target.parent
+    assert preflight_paths[0] != target
+    assert preflight_paths[1] == target
     example = _assignments(EXAMPLE_ENV_PATH.read_text(encoding="utf-8"))
     actual = _assignments(initialized.decode())
     for name in set(example) - set(SECRET_VARIABLES):
@@ -257,23 +326,114 @@ def test_initializer_hands_initialized_values_to_existing_preflight(tmp_path: Pa
     assert target.is_file()
 
 
-def test_initializer_does_not_publish_a_file_that_fails_preflight(tmp_path: Path) -> None:
+def test_initializer_does_not_publish_invalid_full_configuration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    example = tmp_path / ".env.example"
     target = tmp_path / ".env"
+    invalid_content = _replace_setting(
+        EXAMPLE_ENV_PATH.read_text(encoding="utf-8"),
+        "HTTP_MAX_ATTEMPTS",
+        "invalid-http-bound-sentinel",
+    )
+    example.write_text(invalid_content, encoding="utf-8")
+    generated = {
+        "POSTGRES_PASSWORD": "generated-postgres-sentinel",
+        "S3_ACCESS_KEY": "generated-access-sentinel",
+        "S3_SECRET_KEY": "generated-storage-sentinel",
+        "GARAGE_RPC_SECRET": "0123456789abcdef" * 4,
+    }
+    monkeypatch.setattr(init_local_env_module, "_generated_values", lambda: generated)
+    messages: list[str] = []
 
-    def reject(_: Path) -> None:
-        raise InitializationError("local environment preflight failed: invalid setting")
+    with pytest.raises(InitializationError, match="HTTP_MAX_ATTEMPTS") as error:
+        initialize_local_environment(
+            example_path=example,
+            target_path=target,
+            is_tracked=lambda _: False,
+            output=messages.append,
+        )
 
-    with pytest.raises(InitializationError, match="preflight failed"):
+    failure = str(error.value)
+    assert not target.exists()
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+    assert messages == []
+    assert "invalid-http-bound-sentinel" not in failure
+    for value in generated.values():
+        assert value not in failure
+
+
+def test_initializer_preserves_placeholder_target_when_full_preflight_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / ".env"
+    original = _replace_setting(
+        EXAMPLE_ENV_PATH.read_text(encoding="utf-8"),
+        "FILE_MAX_RECORDS",
+        "0",
+    ).encode()
+    target.write_bytes(original)
+    generated = {
+        "POSTGRES_PASSWORD": "generated-postgres-sentinel",
+        "S3_ACCESS_KEY": "generated-access-sentinel",
+        "S3_SECRET_KEY": "generated-storage-sentinel",
+        "GARAGE_RPC_SECRET": "0123456789abcdef" * 4,
+    }
+    monkeypatch.setattr(init_local_env_module, "_generated_values", lambda: generated)
+    messages: list[str] = []
+
+    with pytest.raises(InitializationError, match="FILE_MAX_RECORDS") as error:
         initialize_local_environment(
             example_path=EXAMPLE_ENV_PATH,
             target_path=target,
             is_tracked=lambda _: False,
-            preflight=reject,
-            output=lambda _: None,
+            output=messages.append,
         )
 
-    assert not target.exists()
-    assert list(tmp_path.iterdir()) == []
+    failure = str(error.value)
+    assert target.read_bytes() == original
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+    assert messages == []
+    for value in generated.values():
+        assert value not in failure
+
+
+def test_initializer_preserves_initialized_target_when_full_preflight_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / ".env"
+    initialized, generated = _initialized_environment(
+        _replace_setting(
+            EXAMPLE_ENV_PATH.read_text(encoding="utf-8"),
+            "SNAPSHOT_MAX_CHUNKS",
+            "10000",
+        )
+    )
+    original = initialized.encode()
+    target.write_bytes(original)
+    messages: list[str] = []
+
+    def reject_regeneration() -> dict[str, str]:
+        pytest.fail("initialized target must not regenerate credentials")
+
+    monkeypatch.setattr(init_local_env_module, "_generated_values", reject_regeneration)
+    with pytest.raises(InitializationError, match="SNAPSHOT_MAX_CHUNKS") as error:
+        initialize_local_environment(
+            example_path=EXAMPLE_ENV_PATH,
+            target_path=target,
+            is_tracked=lambda _: False,
+            output=messages.append,
+        )
+
+    failure = str(error.value)
+    assert target.read_bytes() == original
+    assert list(tmp_path.glob(f".{target.name}.*.tmp")) == []
+    assert messages == []
+    for value in generated.values():
+        assert value not in failure
 
 
 def test_demo_contracts_are_allow_listed_canonical_and_path_safe() -> None:

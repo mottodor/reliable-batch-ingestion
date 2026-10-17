@@ -4,11 +4,11 @@ Updated: 2026-10-16
 
 ## Current stage
 
-The core lab through BI-080 remains implemented, and BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and its findings have bounded follow-up tasks. BI-091 and BI-092 are complete: ADR 0003 now has a fully implemented, tested, and documented REST logical-run manifest contract, closing the BI-090-F02 follow-up without reopening completed product tasks or adding Possible extensions. BI-093 is complete: shared backend-error normalization and source-owned terminal boundaries now give identified REST, file, and snapshot storage failures one redacted terminal event plus one final summary, with confirmed-only counters, handled exit `4`, retained evidence, operator documentation, and isolated unavailable-S3 acceptance across all three commands. BI-094 is selected next.
+The core lab through BI-080 remains implemented, and BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and its findings have bounded follow-up tasks. BI-091 and BI-092 are complete: ADR 0003 now has a fully implemented, tested, and documented REST logical-run manifest contract, closing the BI-090-F02 follow-up without reopening completed product tasks or adding Possible extensions. BI-093 is complete: shared backend-error normalization and source-owned terminal boundaries now give identified REST, file, and snapshot storage failures one redacted terminal event plus one final summary, with confirmed-only counters, handled exit `4`, retained evidence, operator documentation, and isolated unavailable-S3 acceptance across all three commands. BI-094 is complete: the total REST page deadline now covers unbuffered successful-body transport chunks, with deterministic fetcher/service cleanup, no-partial-persistence, stable terminal-output evidence, current operator documentation, and full live/clean-export regression acceptance. BI-095 is complete: local preflight delegates the full application surface to `AppConfig.from_env()` while retaining separate Compose-only checks, and the atomic initializer now has explicit full-validation failure, redaction, cleanup, and byte-stable rerun acceptance. BI-096 is selected next.
 
 ```yaml
-active_task_id: BI-094
-last_completed_task_id: BI-093
+active_task_id: BI-096
+last_completed_task_id: BI-095
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
@@ -162,12 +162,21 @@ last_completed_task_id: BI-093
 - BI-093 slice 4 captures or validates the snapshot descriptor and derives stable trace IDs before opening a service-owned S3 session, delays terminal success until session close, and attaches the emitted failure event/summary to `SnapshotHandledError`;
 - snapshot setup/close, reconciliation, raw-write, and manifest-write backend failures now emit exactly one `snapshot_failed` plus one final summary with direct cause chaining and confirmed-only counters, while descriptor failures open no S3 session and arbitrary non-storage defects retain runtime classification;
 - isolated loopback-unavailable integration proves handled exit `4`, exact terminal cardinality, redaction, bounded duration, and unchanged exact object state for REST, file, and snapshot commands; the recovery demo now requires the REST terminal pair before normal-command recovery;
-- BI-093 slice 5 documents shared and source-owned setup/operation/close failure behavior, exact terminal ordering, stable codes/exits, confirmed-only metrics, redaction, and retained-state recovery; removes the superseded backend-output limitation; and closes the task after focused, offline, integration, clean-export, LSP, policy, and verification gates pass.
+- BI-093 slice 5 documents shared and source-owned setup/operation/close failure behavior, exact terminal ordering, stable codes/exits, confirmed-only metrics, redaction, and retained-state recovery; removes the superseded backend-output limitation; and closes the task after focused, offline, integration, clean-export, LSP, policy, and verification gates pass;
+- BI-094 planning fixes unbuffered HTTPX transport-chunk iteration, monotonic checks around every receive, deterministic fake-clock slow-trickle evidence, response/spool cleanup, no partial raw persistence, stable handled output, regression coverage, and a two-slice implementation boundary without changing runtime code;
+- BI-094 slice 1 consumes successful HTTP bodies through `iter_raw(chunk_size=None)`, checks the existing monotonic budget before and after every transport receive and at end-of-stream, rejects the crossing chunk before spool/hash admission, and retains the existing size and cleanup boundaries;
+- deterministic fetcher tests prove a ten-byte trickle stops after two transport chunks under a one-second fake-clock budget, returns the existing first-attempt transport exhaustion with zero retries, closes response and spool resources, and preserves exact normal-response bytes, length, and SHA-256;
+- BI-094 slice 2 proves at the service boundary that the same deadline crossing performs no raw/page-manifest/aggregate write, reports zero confirmed persistence counters, and emits exactly one stable failed event plus one final summary; REST/README wording now describes the implemented total body-streaming budget, and focused, offline, live, integration, clean-export, LSP, and verification gates pass;
+- BI-095 planning fixes direct delegation to the complete `AppConfig` validation surface, retained Compose-only checks, redacted missing/malformed/cross-field evidence, prepublication failure atomicity, byte-stable reruns, exact documentation wording, and a two-slice test-first implementation boundary without changing runtime behavior;
+- BI-095 slice 1 delegates application validation to `AppConfig.from_env()` over the parsed dotenv mapping, catches only `ConfigurationError`, and preserves independent Compose-only ports, Garage RPC-secret syntax, and recognized-placeholder policy;
+- complete-template tests now reject omitted PostgreSQL, S3, HTTP, file, snapshot, and logging settings; malformed URLs/enums/numeric bounds; HTTP/snapshot protocol maxima; and file/snapshot cross-field violations without printing sentinels or invalid values;
+- BI-095 slice 2 proves that full-validation failure publishes no absent target, preserves placeholder and initialized target bytes, removes temporary siblings, emits no success message, and discloses neither generated nor invalid values;
+- valid initializer reruns execute the same complete preflight, preserve exact bytes and mode `0600`, and never regenerate credentials;
+- Make help and README now distinguish complete application validation from Compose-only port, Garage RPC-secret, and placeholder checks, and explicitly make no connectivity, credential-acceptance, readiness, or `SOURCE_SEED` claim;
+- the complete BI-095 focused, offline, integration, clean-export, LSP, policy, and verification matrix passes, so BI-095 is done and BI-096 is selected.
 
 ## Not completed
 
-- BI-094: enforce the REST total monotonic deadline during response streaming;
-- BI-095: align local initialization/preflight with full application configuration;
 - BI-096: attest the completed source set from an exact clean committed checkout.
 
 ## Known limitations and risks
@@ -176,23 +185,19 @@ last_completed_task_id: BI-093
 - Concurrent ingestion writers are outside the core contract.
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
 - Ignored `.env` files created before BI-070 slice 1 must be refreshed with the committed HTTP, `FILE_*`, PostgreSQL timeout, and `SNAPSHOT_*` settings before integration targets or ingestion CLIs can load complete configuration.
-- BI-090-F01–F05 remain the authoritative findings for the frozen audit baseline. The BI-090-F02 follow-up is resolved by accepted ADR 0003 plus completed BI-092, and the BI-090-F03 follow-up is resolved by completed BI-093. BI-094 through BI-096 remain independently actionable for F04, F05, and F01 respectively. The exact original failed traceability rows and follow-up mapping remain in `docs/audits/BI-090.md`.
+- BI-090-F01–F05 remain the authoritative findings for the frozen audit baseline. Their follow-ups are resolved by accepted ADR 0003 plus completed BI-092 for F02, completed BI-093 for F03, completed BI-094 for F04, and completed BI-095 for F05. BI-096 remains independently actionable for F01. The exact original failed traceability rows and follow-up mapping remain in `docs/audits/BI-090.md`.
 
 ## Latest validation
 
-2026-10-16, BI-093 slice 5 closeout:
+2026-10-16, BI-095 slice 2 closeout:
 
-- shared/core plus REST, file, snapshot, recovery-demo, and README documentation now matches the source-owned backend-failure behavior proven in slices 1–4; the obsolete BI-093 limitation and exit-5 claims are removed;
-- focused storage/API/file/snapshot/demo unit suites — PASS: 176 tests;
-- active LSP diagnostics over all 37 changed Python paths — PASS with no findings;
-- `make lint` — PASS: Ruff, formatting, and strict mypy over 81 source files;
-- `make test` — PASS: 643 offline tests with 76 integration tests deselected;
-- Compose rendering — PASS;
-- isolated unavailable-S3 acceptance — PASS: three REST/file/snapshot command cases, handled exit `4`, exact terminal pairs, redaction, bounded duration, and unchanged exact target state;
-- `make integration` — PASS: 76 integration tests, repeat-seed verification, and infrastructure persistence/reset recovery;
-- isolated clean-export walkthrough — PASS in 26.97 seconds with a 2.04-second warm happy path, exact aggregate-aware inventory, redaction, protected-state checks, and verified cleanup;
-- `./scripts/verify.sh` — PASS: doctor, repository policy, locked dependency sync, Ruff, formatting, strict mypy, 643 offline tests with 76 integration tests deselected, and Compose rendering.
+- the documentation assertion failed first against the old Make/README wording; the expanded initializer suite then passed 28 focused tests with absent-target, placeholder-target, initialized-target, redaction, cleanup, full-preflight, mode-`0600`, byte-stability, and no-regeneration evidence;
+- focused preflight/configuration tests — PASS (82); `make lint` — PASS with Ruff, formatting, and strict mypy over 81 source files;
+- `make test` — PASS with 682 offline tests and 76 integration tests deselected; active LSP diagnostics for the changed Python test path — PASS with no findings;
+- Compose rendering — PASS; `make integration` — PASS with 76 integration tests, repeat-seed verification, and infrastructure persistence/reset recovery;
+- isolated clean-export walkthrough — PASS in 44.37 seconds with a 2.13-second warm happy path, exact inspection, redaction, protected-state checks, and verified cleanup;
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy, 682 offline tests, and Compose rendering.
 
 ## Next atomic step
 
-Execute BI-094 only: add deterministic slow-trickle tests, then enforce the configured monotonic total deadline while streaming successful REST response bodies without changing retry, raw-preservation, or terminal-output contracts.
+Execute BI-096 only: attest the completed source set from an exact named clean committed checkout without changing product behavior.

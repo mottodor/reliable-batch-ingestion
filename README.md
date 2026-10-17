@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: the core lab plus BI-092 and BI-093 audit repairs are implemented and acceptance-tested. BI-094 is the next bounded audit follow-up.
+> Current stage: the core lab and BI-092 through BI-095 audit repairs are implemented and acceptance-tested. BI-096 clean-commit reproducibility attestation is the next bounded audit follow-up.
 
 ## Project references
 
@@ -42,7 +42,9 @@ make setup
 make verify
 ```
 
-`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. Commands that start or inspect services first run a redacting preflight against the ignored `.env` and reject placeholders. The preflight also validates `MOCK_API_PORT` and the positive HTTP, file, PostgreSQL timeout, snapshot, and S3 bounds from `.env.example`. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
+`make verify` validates `compose.yaml` against the committed placeholders in `.env.example`; it does not start containers. `make init-local-env` replaces only the four recognized credential placeholders, writes an owner-only temporary file, runs the same full preflight before atomic publication, and leaves a valid initialized file byte-for-byte unchanged on rerun. It refuses tracked files, symlinks, unknown placeholders, and partial credential rotation without printing generated values.
+
+Commands that start or inspect services first run the redacting preflight against the ignored `.env`. The preflight constructs the complete application configuration and validates PostgreSQL, S3, HTTP, file, snapshot, and logging settings. It separately validates Compose-only ports, Garage RPC secret, and recognized placeholders. This is pure configuration validation: it does not contact services or prove that credentials are accepted. It also does not validate `SOURCE_SEED`, service readiness, Compose project names, wait budgets, or arbitrary shell variables; those are checked by their owning commands where applicable. Generate a local Garage RPC secret, for example, with `openssl rand -hex 32`; never commit the result.
 
 ## Local infrastructure
 
@@ -128,7 +130,7 @@ The production source allow-list is `fx-rates` and `shipping-statuses`. Dates mu
 
 Output is newline-delimited structured JSON: handled source/contract outcomes, including S3 session setup/close and backend inspection/read/write failures, emit exactly one `api_ingestion` event followed by one final run summary; a successful backfill emits a completion event. Backend S3 failures use `storage_error`, confirmed-only counters, and exit `4` without an extra `cli_error`; exit `5` remains for unexpected non-storage HTTP/runtime setup or cleanup failures. Other stable exits are `0` success, `2` invalid arguments/range, and `3` invalid configuration. The date service derives stable trace IDs before it acquires its S3 session, and the command reads the ignored `.env` through the existing configuration contract and closes context-owned clients explicitly.
 
-Each HTTP 200 body is streamed under configured HTTP operation timeouts and a response-size bound, checksum-verified in raw storage before JSON/schema validation, and paired one-to-one with an immutable terminal page manifest. A continuously trickling successful response can currently outlive the total elapsed setting; BI-094 owns that bounded follow-up. After all required page pairs succeed, the service writes or reuses one separate success-only `api_logical_run_manifest` at `manifests/api/{source}/source_date={date}/batch_id={batch_id}/logical-run.manifest.json`, then verifies it and every referenced exact byte sequence before emitting success. A successful `N`-page batch therefore has `N` raw pages, `N` page manifests, and one aggregate with no synthetic raw payload.
+Each HTTP 200 body is streamed as unbuffered transport chunks under configured HTTP operation timeouts, a total monotonic page budget, and a response-size bound. The total budget is checked around every transport receive, so a continuously trickling peer cannot extend body consumption indefinitely; a chunk that first crosses the deadline is discarded with the temporary spool, no incomplete raw page is persisted, and the handled result is `http_retry_exhausted`. Complete in-budget bytes are checksum-verified in raw storage before JSON/schema validation and paired one-to-one with an immutable terminal page manifest. After all required page pairs succeed, the service writes or reuses one separate success-only `api_logical_run_manifest` at `manifests/api/{source}/source_date={date}/batch_id={batch_id}/logical-run.manifest.json`, then verifies it and every referenced exact byte sequence before emitting success. A successful `N`-page batch therefore has `N` raw pages, `N` page manifests, and one aggregate with no synthetic raw payload.
 
 Transient 429/5xx and permanent 4xx bodies are not stored as business pages. A page payload left without its page manifest is repaired by rerunning the same command; complete successful pairs are verified and reused without rewriting their original manifest or `run_id`. Legacy page-only successful batches gain only the missing aggregate during normal replay. Mixed page-manifest `run_id` values are valid, while the aggregate's original `completion_run_id`, `completed_at`, and bytes remain fixed on replay. `bytes_written` still counts raw bytes only, and `duplicate_count` still counts reused page pairs only.
 

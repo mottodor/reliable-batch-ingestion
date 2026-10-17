@@ -747,3 +747,77 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Isolated unavailable-S3 acceptance — PASS (3 commands); `make integration` — PASS (76 tests plus repeat-seed and infrastructure recovery); isolated clean-export — PASS in 26.97 seconds with a 2.04-second warm happy path, exact inventory, redaction, protected-state checks, and verified cleanup.
 - `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 643 offline tests, and Compose rendering.
 - Marked BI-093 done and selected BI-094 as the sole next atomic task. Next task: add deterministic slow-trickle tests, then enforce the REST total response deadline without changing retry, raw-preservation, or terminal-output contracts.
+
+## 2026-10-16 — BI-094 REST response-deadline planning
+
+- Added an implementation-ready two-slice BI-094 plan without changing Python, tests, dependencies, runtime behavior, HTTP configuration, object/manifest contracts, or accepted ADRs.
+- Confirmed the gap in HTTPX 0.28.1 semantics: an integer `iter_raw(chunk_size=...)` buffers underlying transport chunks, while read timeout bounds inactivity for one chunk rather than total response wall time.
+- Planned explicit `chunk_size=None` transport iteration with monotonic checks immediately before and after every receive and before accepting end-of-stream, retaining exact size/SHA-256, raw-before-parse, retry, and terminal-output behavior.
+- Defined deterministic no-sleep/public-network evidence using a fake clock, `SyncByteStream`, and `MockTransport`, including bounded chunk consumption, response/spool closure, no partial S3 write, stable `http_retry_exhausted`, and exact terminal event/summary cardinality.
+- Defined focused regression and live acceptance for normal chunked responses, 429, permanent errors, retry budgets, malformed-body preservation, aggregate/backfill behavior, API integration, full integration, and clean export.
+- Based the plan on current Context7 `/encode/httpx/0.28.1` documentation and the locked HTTPX source; no new dependency or ADR is required.
+- Marked BI-094 `in_progress`, indexed the detailed plan, and synchronized the canonical backlog and state handoff.
+- Backlog JSON Schema validation, repository policy, `git diff --check`, and `./scripts/verify.sh` — PASS; verify included locked sync, Ruff, formatting, strict mypy over 81 source files, 643 offline tests, and Compose rendering.
+- Active LSP diagnostics found no errors or warnings in the five changed YAML/Markdown paths; only two pre-existing informational cspell false positives remain in historical BI-090 project identifiers. `make integration` — NOT RUN because planning changed no runtime behavior.
+- Next task: execute BI-094 slice 1 only with the failing deterministic transport-trickle and cleanup tests, then the minimal unbuffered fetcher change.
+
+## 2026-10-16 — BI-094 slice 1 fetcher deadline and resource cleanup
+
+- Added the deterministic transport-trickle regression first: ten one-byte chunks advance an injected monotonic clock by 0.6 seconds each under a one-second page budget, with no real sleep, socket, or public network.
+- The red test proved the existing integer-sized `iter_raw()` path consumed all ten transport chunks before checking elapsed time; the accepted behavior stops after the second chunk, excludes that crossing byte from the spool, and returns the existing first-attempt `transport_error` exhaustion with zero retries.
+- Changed only the successful-body fetcher loop to use `iter_raw(chunk_size=None)` and explicit deadline checks before and after each transport `next()` plus end-of-stream; the response-size ceiling, exact raw-byte hashing, retry policy, HTTPX timeout configuration, persistence, service, and output contracts remain unchanged.
+- Added explicit response-stream and temporary-spool closure evidence on deadline failure, plus normal transport-chunk assertions for exact concatenated bytes, length, SHA-256, and transferred spool ownership.
+- Focused fetcher/retry/client tests — PASS (66); `make lint` — PASS; active LSP diagnostics over both changed Python paths — PASS with no findings.
+- `./scripts/verify.sh` — PASS with doctor, repository policy and synchronized BI-094 `in_progress` state, locked sync, Ruff, formatting, strict mypy over 81 source files, 643 offline tests, 76 integration tests deselected, and Compose rendering.
+- Service-level slow-trickle acceptance, live integration, clean export, REST/README wording, and task closeout were intentionally not started. Next task: execute BI-094 slice 2 only; do not start BI-095.
+
+## 2026-10-16 — BI-094 slice 2 service acceptance and closeout
+
+- Added a deterministic service-level slow-response test over `MockTransport`, a custom `SyncByteStream`, and an injected fake monotonic clock; no real sleep, socket, public network, or mock-source fault mode was introduced.
+- Proved the second of ten one-byte chunks crosses the one-second page budget, the crossing byte never enters the temporary spool, response and spool close, and no raw payload, page manifest, or aggregate write occurs.
+- Proved the existing handled outcome remains `http_retry_exhausted` with `transport_error`, first attempt, zero retries, stable source date/batch/run IDs, zero confirmed persistence counters, and exactly one failed `api_ingestion` event followed by one `run_summary`.
+- Updated the REST contract and README to state that `HTTP_MAX_ELAPSED_SECONDS` covers attempts, retry delays, response headers, and successful-body transport streaming; removed the obsolete BI-094 slow-trickle limitation.
+- Checked HTTPX 0.28.1 streaming and read-timeout semantics through Context7 `/encode/httpx/0.28.1`; no dependency, configuration, key/schema, metric, CLI, retry, storage, or delivery-contract change was needed.
+- Focused fetcher/retry/client tests — PASS (66); focused service/backfill/CLI tests — PASS (43); `make lint` — PASS; `make test` — PASS (644 offline tests, 76 integration deselected); active LSP diagnostics over all three changed Python paths — PASS with no findings; Compose rendering — PASS.
+- Focused API/Garage integration — PASS (16); `make integration` — PASS (76 tests plus repeat-seed and infrastructure persistence/reset recovery); isolated clean-export — PASS in 28.40 seconds with a 2.07-second warm happy path, exact inventory, redaction, protected-state checks, and verified cleanup.
+- Final `./scripts/verify.sh` — PASS with doctor, repository policy and synchronized BI-095 handoff, locked sync, Ruff, formatting, strict mypy over 81 source files, 644 offline tests, and Compose rendering. BI-094 is marked done and BI-095 is selected as the sole next atomic task.
+
+## 2026-10-16 — BI-095 full local preflight planning
+
+- Added an implementation-ready two-slice BI-095 plan without changing Python, tests, dependencies, environment names/defaults, runtime behavior, source contracts, or accepted ADRs.
+- Confirmed `BI-090-F05`: `AppConfig.from_env()` validates the complete PostgreSQL, S3, HTTP, file, snapshot, and logging surface, while the shared local preflight currently checks only selected infrastructure fields and therefore allows an unusable application dotenv file to pass.
+- Planned direct delegation to `AppConfig.from_env(values)` over the parsed dotenv mapping, catching only redacted `ConfigurationError`, while retaining non-overlapping Compose-only port, Garage RPC-secret, and recognized-placeholder checks.
+- Fixed the initializer boundary at the existing owner-only temporary write, `fsync`, full preflight, atomic replace, and cleanup sequence; planned absent-target and existing-target failure evidence plus byte-stable valid reruns with no credential regeneration.
+- Defined deterministic tests for one omitted setting from every application group, malformed and protocol-bound settings, file/snapshot cross-field constraints, sentinel redaction, existing symlink/tracked/placeholder protections, and exact CLI exits/output.
+- Planned Make/README wording that distinguishes complete application validation from Compose-only checks and explicitly avoids any connectivity, credential-authentication, `SOURCE_SEED`, or arbitrary shell-variable claim.
+- Marked BI-095 `in_progress`, indexed the detailed plan, and synchronized the canonical backlog and state handoff.
+- Planning startup `./scripts/doctor.sh` — PASS with a Docker-daemon availability warning. Repository policy, changed-document diagnostics, and `./scripts/verify.sh` remain to be recorded after the planning edits.
+- Next task: execute BI-095 slice 1 only with the failing full preflight matrix, then the minimal `AppConfig` delegation; do not start initializer documentation closeout or BI-096.
+- Planning closeout `git diff --check` and repository policy — PASS; active task/state synchronization reports BI-095 `in_progress` with BI-094 as the last completed task.
+- Active diagnostics over all five changed YAML/Markdown paths — PASS with no errors or warnings; two information-only cspell false positives remain in unchanged historical BI-090 project identifiers.
+- `./scripts/verify.sh` — FAIL at Compose rendering because Docker Compose is unavailable in the current WSL environment. All preceding verify stages passed: doctor with one Docker warning, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, and 644 offline tests with 76 integration tests deselected.
+- `make integration` and isolated clean export — NOT RUN because this planning change altered no runtime behavior and Docker is unavailable. The implementation plan retains both as BI-095 closeout gates.
+- Next task remains BI-095 slice 1 only; do not start slice 2 or BI-096.
+
+## 2026-10-16 — BI-095 slice 1 complete application preflight
+
+- Added the complete preflight matrix first and reproduced 19 false-PASS cases for omitted PostgreSQL, S3, HTTP, file, snapshot, and logging settings; malformed/boundary application values; credential-bearing URLs; protocol maxima; and file/snapshot cross-field constraints.
+- Replaced duplicated application checks in `check_local_env.py` with one `AppConfig.from_env(values)` call over the parsed dotenv mapping, catching only redacted `ConfigurationError` while leaving unexpected defects unclassified.
+- Retained independent local checks only for `S3_PORT`, `GARAGE_ADMIN_PORT`, `MOCK_API_PORT`, exact Garage RPC-secret syntax, and the four recognized credential placeholders; no service connection, configuration name/default, dependency, or runtime source contract changed.
+- Derived preflight and seed-command fixtures from the complete committed `.env.example`, replacing only recognized placeholders, so all Make paths exercised by offline tests now satisfy the same application configuration surface.
+- Added sentinel assertions proving failures and success output contain no credential, invalid bound, or credential-bearing URL values while preserving exit `0/1` and stable PASS/FAIL headings; every recognized placeholder produces one non-duplicated setting error.
+- Focused config tests — PASS (37); local preflight and initializer-contract tests — PASS (70); preflight/PostgreSQL seed-command tests — PASS (52).
+- `make lint` — PASS with Ruff, formatting, and strict mypy over 81 source files; `make test` — PASS with 679 offline tests and 76 integration tests deselected; active LSP diagnostics over all three changed Python paths — PASS with no findings; repository policy and `git diff --check` — PASS.
+- `./scripts/verify.sh` — FAIL only at Compose rendering because Docker Compose is unavailable; doctor, repository policy, locked sync, Ruff, formatting, strict mypy, and 679 offline tests passed first. Integration and clean export remain slice-2 gates and were NOT RUN because Docker is unavailable.
+- BI-095 remains `in_progress`. Next task: execute slice 2 only for full-validation initializer atomicity/byte-stability tests, exact Make/README wording, live/clean-export evidence, and task closeout; do not start BI-096.
+
+## 2026-10-16 — BI-095 slice 2 atomic initializer acceptance and closeout
+
+- Added slice-2 tests first; the documentation assertion failed against the old Make help and README wording before those operator-facing claims were updated.
+- Proved full `AppConfig` validation failure publishes no absent target, preserves both placeholder and already initialized target bytes, removes temporary siblings, emits no success message, and does not disclose generated credentials or invalid setting values.
+- Strengthened valid-rerun acceptance to execute the complete preflight on both runs, preserve exact bytes and mode `0600`, and fail if credential generation is attempted on the second run; all tracked-file, symlink, duplicate, unknown-placeholder, partial-rotation, and owner-only guarantees remain covered.
+- Updated Make help and README to distinguish complete PostgreSQL, S3, HTTP, file, snapshot, and logging validation from Compose-only ports, Garage RPC-secret, and recognized-placeholder checks, with explicit no-connectivity, credential-acceptance, readiness, or `SOURCE_SEED` claim.
+- Focused initializer tests — PASS (28); focused preflight/configuration tests — PASS (82); active LSP diagnostics for the changed Python path — PASS with no findings; `make lint` — PASS; `make test` — PASS (682 offline tests, 76 integration deselected); Compose rendering — PASS.
+- `make integration` — PASS with 76 integration tests, repeat-seed verification, and infrastructure persistence/reset recovery; isolated clean-export — PASS in 44.37 seconds with a 2.13-second warm happy path, exact inspection, redaction, protected-state checks, and verified cleanup.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests, and Compose rendering.
+- Marked BI-095 done, selected BI-096 as the sole next atomic task, and synchronized the backlog/state handoff. Next task: execute BI-096 only; do not change product behavior.
