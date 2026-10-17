@@ -12,7 +12,6 @@ from typing import BinaryIO, Self, cast
 
 import httpx
 
-from batch_ingestion.checksums import DEFAULT_CHUNK_SIZE
 from batch_ingestion.config import HttpConfig
 
 from .client import timeout_for_remaining
@@ -251,6 +250,15 @@ def fetch_page(
         attempt += 1
 
 
+def _ensure_response_deadline(*, budget: RetryBudget, attempt: int) -> None:
+    if budget.remaining_seconds <= 0:
+        raise HttpRetryExhausted(
+            classification=RetryClassification.TRANSPORT_ERROR,
+            status_code=None,
+            attempt=attempt,
+        )
+
+
 def _read_success_response(
     response: httpx.Response,
     *,
@@ -271,9 +279,16 @@ def _read_success_response(
     )
     digest = hashlib.sha256()
     content_length = 0
-    response_chunk_size = min(DEFAULT_CHUNK_SIZE, config.max_response_bytes + 1)
+    chunks = iter(response.iter_raw(chunk_size=None))
     try:
-        for chunk in response.iter_raw(chunk_size=response_chunk_size):
+        while True:
+            _ensure_response_deadline(budget=budget, attempt=attempt)
+            try:
+                chunk = next(chunks)
+            except StopIteration:
+                _ensure_response_deadline(budget=budget, attempt=attempt)
+                break
+            _ensure_response_deadline(budget=budget, attempt=attempt)
             next_length = content_length + len(chunk)
             if next_length > config.max_response_bytes:
                 raise ResponseSizeLimitError(
@@ -284,18 +299,6 @@ def _read_success_response(
             stream.write(chunk)
             digest.update(chunk)
             content_length = next_length
-            if budget.remaining_seconds <= 0:
-                raise HttpRetryExhausted(
-                    classification=RetryClassification.TRANSPORT_ERROR,
-                    status_code=None,
-                    attempt=attempt,
-                )
-        if budget.remaining_seconds <= 0:
-            raise HttpRetryExhausted(
-                classification=RetryClassification.TRANSPORT_ERROR,
-                status_code=None,
-                attempt=attempt,
-            )
         received_at = utc_now()
         stream.seek(0)
         return FetchedPage(

@@ -64,7 +64,7 @@ All settings are loaded explicitly from the ignored `.env`; importing the packag
 | `HTTP_MAX_ATTEMPTS` | Total page requests, including the initial request |
 | `HTTP_BACKOFF_BASE_SECONDS` | Initial deterministic fallback delay |
 | `HTTP_BACKOFF_MAX_SECONDS` | Cap for deterministic exponential fallback |
-| `HTTP_MAX_ELAPSED_SECONDS` | Monotonic request/retry budget for one page; the known slow-trickle response gap remains BI-094 |
+| `HTTP_MAX_ELAPSED_SECONDS` | Total monotonic budget for one page across request attempts, retry delays, response headers, and complete successful-body streaming |
 | `HTTP_PAGE_SIZE` | Positive request size, at most 100; part of logical identity |
 | `HTTP_MAX_PAGES` | Positive logical-batch page bound, at most 9,999 |
 | `HTTP_MAX_RESPONSE_BYTES` | Maximum raw bytes accepted for one HTTP 200 page |
@@ -74,7 +74,7 @@ One context-managed `httpx.Client` is reused for a command and is configured wit
 
 The date service derives `source_date`, `batch_id`, and a fresh `run_id` before opening its context-owned S3 session. Aggregate preflight, page evidence, aggregate publication/final verification, and S3 client close all remain inside that attempt. Success is emitted only after the storage context closes cleanly; known setup or close failures therefore have the same trace identifiers and terminal contract as request-time S3 failures.
 
-Each HTTP 200 response must have an `application/json` base media type. Its raw body is streamed in bounded chunks to a seekable spooled file while byte length and SHA-256 are calculated. Reading stops as soon as the configured size limit would be exceeded. Only one bounded page may be loaded for JSON validation; a multi-page batch is never accumulated in memory.
+Each HTTP 200 response must have an `application/json` base media type. Its raw body is streamed as unbuffered HTTPX transport chunks to a seekable spooled file while byte length and SHA-256 are calculated. The total monotonic page budget is checked immediately before and after every transport receive and again at end-of-stream, so repeated chunks that arrive within the per-operation read timeout cannot extend complete-body consumption beyond `HTTP_MAX_ELAPSED_SECONDS`. A chunk whose receive first crosses the deadline is not admitted to the spool, checksum, or S3 persistence; the response and temporary spool close, and the attempt ends as handled `http_retry_exhausted` with transport classification. Reading also stops as soon as the configured size limit would be exceeded. Only one bounded page may be loaded for JSON validation; a multi-page batch is never accumulated in memory.
 
 The separate logical-run manifest has a fixed 8 MiB (8,388,608-byte) declared and actual read limit; the existing page-manifest read limit remains 64 KiB. The aggregate parser holds at most that bounded metadata document in memory. Its `page_count` is in `1..9999`, `record_count` is in `0..999900`, and each raw payload length is in the signed 64-bit non-negative range.
 
@@ -286,5 +286,4 @@ The local mock's scenario selectors are integration-test controls and are delibe
 - Raw and aggregate immutability can expose upstream mutation or bad completion evidence as a conflict. Automatic deletion, overwrite, and cleanup-based repair are intentionally forbidden.
 - A complete aggregate does not avoid source access: normal replay still fetches and validates every source page.
 - The 8 MiB aggregate bound and 9,999-page namespace are fixed version-1 limits; increasing either or changing aggregate cardinality/key/status requires architectural review.
-- A peer that continuously trickles successful response bytes below the HTTP read-timeout threshold can currently exceed `HTTP_MAX_ELAPSED_SECONDS`; BI-094 owns that repair.
 - The CLI does not list or download objects. Inspect retained objects through a standard S3 client using the configured bucket and exact keys.

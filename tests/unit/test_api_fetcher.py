@@ -2,12 +2,13 @@
 
 import hashlib
 import io
-from collections.abc import Callable, Iterator
+from collections.abc import Buffer, Callable, Iterator
 from datetime import UTC, date, datetime
 
 import httpx
 import pytest
 
+import batch_ingestion.api.fetcher as fetcher_module
 from batch_ingestion.api.fetcher import (
     FetchedPage,
     HttpProtocolError,
@@ -17,7 +18,7 @@ from batch_ingestion.api.fetcher import (
     RetryEvent,
     fetch_page,
 )
-from batch_ingestion.api.retry import RetryBudgetExhausted, RetryClassification
+from batch_ingestion.api.retry import RetryClassification
 from batch_ingestion.api.sources import get_source_descriptor
 from batch_ingestion.config import HttpConfig
 
@@ -66,6 +67,16 @@ class ChunkStream(httpx.SyncByteStream):
         self.closed = True
 
 
+class TrackingSpool(io.BytesIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self.written_chunks: list[bytes] = []
+
+    def write(self, data: Buffer, /) -> int:
+        self.written_chunks.append(bytes(data))
+        return super().write(data)
+
+
 def _fetch(
     handler: httpx.MockTransport,
     *,
@@ -110,6 +121,8 @@ def test_fetch_page_streams_raw_chunks_and_calculates_exact_length_and_checksum(
     finally:
         fetched.close()
 
+    assert fetched.stream.closed is True
+    assert stream.yielded_chunks == 3
     assert stream.closed is True
     assert len(requests) == 1
     assert requests[0].url.path == "/v1/fx-rates"
@@ -157,8 +170,11 @@ def test_fetch_page_requires_application_json_content_type(headers: dict[str, st
     assert stream.closed is True
 
 
-def test_page_deadline_is_checked_after_every_raw_chunk() -> None:
+def test_slow_transport_trickle_stops_at_deadline_and_closes_resources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     elapsed = 0.0
+    spools: list[TrackingSpool] = []
 
     def monotonic() -> float:
         return elapsed
@@ -167,7 +183,15 @@ def test_page_deadline_is_checked_after_every_raw_chunk() -> None:
         nonlocal elapsed
         elapsed += 0.6
 
-    stream = ChunkStream([b"123", b"456"], on_chunk=advance)
+    def tracking_spool(*, max_size: int, mode: str) -> TrackingSpool:
+        assert max_size == 1024
+        assert mode == "w+b"
+        spool = TrackingSpool()
+        spools.append(spool)
+        return spool
+
+    monkeypatch.setattr(fetcher_module, "SpooledTemporaryFile", tracking_spool)
+    stream = ChunkStream([b"x"] * 10, on_chunk=advance)
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -176,13 +200,22 @@ def test_page_deadline_is_checked_after_every_raw_chunk() -> None:
             stream=stream,
         )
 
-    with pytest.raises(RetryBudgetExhausted, match="elapsed-time budget"):
+    with pytest.raises(HttpRetryExhausted) as captured:
         _fetch(
             httpx.MockTransport(handler),
             config=_config(max_elapsed_seconds=1.0),
             monotonic=monotonic,
         )
+
+    assert captured.value.attempt == 1
+    assert captured.value.retry_count == 0
+    assert captured.value.status_code is None
+    assert captured.value.classification is RetryClassification.TRANSPORT_ERROR
+    assert stream.yielded_chunks == 2
     assert stream.closed is True
+    assert len(spools) == 1
+    assert spools[0].written_chunks == [b"x"]
+    assert spools[0].closed is True
 
 
 class FakeClock:

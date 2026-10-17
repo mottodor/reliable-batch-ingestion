@@ -3,18 +3,21 @@
 import hashlib
 import io
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Buffer, Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import BinaryIO
 
 import httpx
 import pytest
 
+import batch_ingestion.api.fetcher as fetcher_module
 from batch_ingestion.api.logical_manifest import (
     ApiLogicalRunManifest,
     api_logical_run_manifest_key,
 )
+from batch_ingestion.api.retry import RetryClassification
 from batch_ingestion.api.service import (
     ApiErrorCode,
     ApiIngestionError,
@@ -654,6 +657,106 @@ def test_http_500_failure_has_summary_and_creates_no_page_object() -> None:
     assert storage.events == []
     assert storage.writes == {}
     assert api_logical_run_manifest_key(_identity()) not in storage.objects
+
+
+def test_slow_response_deadline_emits_terminal_pair_without_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    elapsed = 0.0
+    emitted: list[dict[str, object]] = []
+    storage = RecordingStorage({1: ReconciliationState.ABSENT})
+
+    class SlowStream(httpx.SyncByteStream):
+        def __init__(self) -> None:
+            self.closed = False
+            self.yielded_chunks = 0
+
+        def __iter__(self) -> Iterator[bytes]:
+            nonlocal elapsed
+            for _ in range(10):
+                self.yielded_chunks += 1
+                elapsed += 0.6
+                yield b"x"
+
+        def close(self) -> None:
+            self.closed = True
+
+    class TrackingSpool(io.BytesIO):
+        def __init__(self) -> None:
+            super().__init__()
+            self.written_chunks: list[bytes] = []
+
+        def write(self, data: Buffer, /) -> int:
+            self.written_chunks.append(bytes(data))
+            return super().write(data)
+
+    spools: list[TrackingSpool] = []
+
+    def tracking_spool(*, max_size: int, mode: str) -> TrackingSpool:
+        assert max_size == 1024
+        assert mode == "w+b"
+        spool = TrackingSpool()
+        spools.append(spool)
+        return spool
+
+    monkeypatch.setattr(fetcher_module, "SpooledTemporaryFile", tracking_spool)
+    stream = SlowStream()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Type": CONTENT_TYPE},
+            stream=stream,
+        )
+
+    with (
+        httpx.Client(
+            base_url="https://mock.invalid",
+            transport=httpx.MockTransport(handler),
+        ) as client,
+        pytest.raises(ApiIngestionError) as captured,
+    ):
+        ingest_api_date(
+            client=client,
+            storage=storage,
+            http_config=replace(_config(), max_elapsed_seconds=1.0),
+            descriptor=get_source_descriptor("fx-rates"),
+            source_date=SOURCE_DATE,
+            monotonic=lambda: elapsed,
+            sleep=lambda _: pytest.fail("a partial HTTP 200 body must not retry"),
+            utc_now=lambda: datetime(2026, 9, 1, 12, tzinfo=UTC),
+            run_id_factory=lambda: RUN_ID,
+            event_sink=emitted.append,
+        )
+
+    error = captured.value
+    assert error.code is ApiErrorCode.HTTP_RETRY_EXHAUSTED
+    assert error.event.status is ApiRunStatus.FAILED
+    assert error.event.source_date == SOURCE_DATE
+    assert error.event.batch_id == derive_batch_id(_identity())
+    assert error.event.run_id == RUN_ID
+    assert error.event.page == 1
+    assert error.event.http_status is None
+    assert error.event.classification is RetryClassification.TRANSPORT_ERROR
+    assert error.summary.records_read == 0
+    assert error.summary.records_accepted == 0
+    assert error.summary.records_rejected == 0
+    assert error.summary.pages_fetched == 0
+    assert error.summary.bytes_written == 0
+    assert error.summary.retry_count == 0
+    assert error.summary.duplicate_count == 0
+    assert stream.yielded_chunks == 2
+    assert stream.closed is True
+    assert len(spools) == 1
+    assert spools[0].written_chunks == [b"x"]
+    assert spools[0].closed is True
+    assert storage.events == []
+    assert storage.writes == {}
+    assert storage.objects == {}
+    assert emitted == [
+        error.event.to_dict(),
+        {"event": "run_summary", **error.summary.to_dict()},
+    ]
 
 
 def test_aggregate_is_fully_verified_before_terminal_success_output() -> None:
