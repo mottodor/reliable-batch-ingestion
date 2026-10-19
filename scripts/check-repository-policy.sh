@@ -75,19 +75,31 @@ else
   fi
 fi
 
-active_count=$(printf '%s\n' "${task_ids[@]}" | grep -Fxc "$backlog_active" || true)
-if [[ "$active_count" -ne 1 ]]; then
-  fail "active task must exist exactly once in the backlog: $backlog_active"
-fi
-
-active_status=$(awk -v active="$backlog_active" '
-  $1 == "-" && $2 == "id:" {selected = ($3 == active)}
-  selected && $1 == "status:" {print $2; exit}
-' tasks/backlog.yaml)
-if [[ "$active_status" != "todo" && "$active_status" != "in_progress" ]]; then
-  fail "active task must be todo or in_progress: $backlog_active is ${active_status:-missing}"
+if [[ "$backlog_active" == "null" ]]; then
+  non_done_tasks=$(awk '
+    $1 == "-" && $2 == "id:" {task_id = $3}
+    $1 == "status:" && $2 != "done" {print task_id ":" $2}
+  ' tasks/backlog.yaml)
+  if [[ -n "$non_done_tasks" ]]; then
+    fail "active_task_id may be null only when every task is done: ${non_done_tasks//$'\n'/, }"
+  else
+    printf 'OK   terminal backlog state has no active task and all tasks are done\n'
+  fi
 else
-  printf 'OK   active task status is %s\n' "$active_status"
+  active_count=$(printf '%s\n' "${task_ids[@]}" | grep -Fxc "$backlog_active" || true)
+  if [[ "$active_count" -ne 1 ]]; then
+    fail "active task must exist exactly once in the backlog: $backlog_active"
+  fi
+
+  active_status=$(awk -v active="$backlog_active" '
+    $1 == "-" && $2 == "id:" {selected = ($3 == active)}
+    selected && $1 == "status:" {print $2; exit}
+  ' tasks/backlog.yaml)
+  if [[ "$active_status" != "todo" && "$active_status" != "in_progress" ]]; then
+    fail "active task must be todo or in_progress: $backlog_active is ${active_status:-missing}"
+  else
+    printf 'OK   active task status is %s\n' "$active_status"
+  fi
 fi
 
 state_last_completed=$(awk '$1 == "last_completed_task_id:" {print $2; exit}' docs/STATE.md)

@@ -1,7 +1,7 @@
-# yaml-language-server: $schema=./backlog.schema.json
+# yaml-language-server: $schema=./backlog.v1.schema.json
 schema_version: 1
 project: reliable-batch-ingestion
-active_task_id: BI-096
+active_task_id: null
 
 status_values:
   - todo
@@ -316,7 +316,7 @@ tasks:
 
   - id: BI-096
     title: Attest clean-commit core reproducibility
-    status: in_progress
+    status: done
     depends_on: [BI-090]
     scope:
       - Resolve the remaining BI-090-F01 follow-up by validating the completed audited source set from an exact named clean committed checkout.

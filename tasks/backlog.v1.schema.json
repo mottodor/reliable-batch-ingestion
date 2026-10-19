@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/reliable-batch-ingestion/backlog.schema.json",
+  "$id": "https://example.invalid/reliable-batch-ingestion/backlog.v1.schema.json",
   "title": "Reliable batch ingestion task backlog",
   "type": "object",
   "additionalProperties": false,
@@ -9,8 +9,8 @@
     "schema_version": {"const": 1},
     "project": {"type": "string", "minLength": 1},
     "active_task_id": {
-      "description": "Task selected for next/current work; its status is todo or in_progress.",
-      "type": "string",
+      "description": "Task selected for next/current work, or null when every recorded task is done and no task is active.",
+      "type": ["string", "null"],
       "pattern": "^BI-[0-9]{3}$"
     },
     "status_values": {

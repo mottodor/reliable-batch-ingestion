@@ -2,7 +2,7 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: the core lab and BI-092 through BI-095 audit repairs are implemented and acceptance-tested. BI-096 clean-commit reproducibility attestation is the next bounded audit follow-up.
+> Current stage: the core lab, independent audit follow-ups, and BI-096 clean-commit reproducibility attestation are complete. The backlog is terminal with no active task; future improvements or corrections begin as new explicitly authorized atomic tasks.
 
 ## Project references
 
@@ -15,7 +15,7 @@ A learning project for building restart-safe, idempotent batch ingestion from RE
 - PostgreSQL snapshot contract: [`docs/ingestion/postgres-snapshot.md`](docs/ingestion/postgres-snapshot.md)
 - Recovery demos and clean-export walkthrough: [`docs/ingestion/recovery-demos.md`](docs/ingestion/recovery-demos.md)
 - Architectural decisions: [`docs/adr/README.md`](docs/adr/README.md)
-- Atomic backlog and active task: [`tasks/backlog.yaml`](tasks/backlog.yaml)
+- Atomic backlog and active/terminal state: [`tasks/backlog.yaml`](tasks/backlog.yaml)
 - Current state: [`docs/STATE.md`](docs/STATE.md)
 - Coding-agent rules: [`AGENTS.md`](AGENTS.md)
 

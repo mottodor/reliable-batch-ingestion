@@ -9,7 +9,7 @@ Before changing code or documentation, the agent must:
 1. Read `START_HERE.md`.
 2. Read `docs/STATE.md`.
 3. Read `docs/specification/batch-ingestion.md`, excluding **Possible extensions** from the current scope.
-4. Read `tasks/backlog.yaml`, confirm that its `active_task_id` matches `docs/STATE.md`, and locate that task.
+4. Read `tasks/backlog.yaml` and confirm that its `active_task_id` matches `docs/STATE.md`. If it names a task, locate that task; if it is `null`, confirm that every recorded task is done before creating a newly authorized atomic task.
 5. Read the relevant accepted ADRs from the index in `docs/adr/README.md`.
 6. Run `./scripts/doctor.sh`.
 7. State a short plan and the verifiable acceptance criteria for the task being performed.
@@ -31,9 +31,10 @@ Document roles are intentionally distinct:
 
 - `docs/specification/batch-ingestion.md` defines product scope and required behavior;
 - accepted ADRs define binding architectural decisions;
-- `tasks/backlog.yaml` is the canonical machine-readable task list, task status, and active task;
-- `active_task_id` means the task selected for the next or current implementation: it may be `todo` before work starts or `in_progress` when durable partial work exists;
-- `docs/STATE.md` is the concise handoff snapshot and must mirror the backlog's active task;
+- `tasks/backlog.yaml` is the canonical machine-readable task list, task status, and active-task or terminal-state marker;
+- `active_task_id` names the task selected for the next or current implementation: its status may be `todo` before work starts or `in_progress` when durable partial work exists; `null` means no task is active and is valid only when every recorded task is `done`;
+- `docs/STATE.md` is the concise handoff snapshot and must mirror the backlog's active task or terminal state;
+- after a terminal state, an explicitly authorized improvement or correction must be added as a new atomic backlog task and selected as `active_task_id` before implementation;
 - `docs/IMPLEMENTATION_PLAN.md` explains task ordering but does not duplicate status;
 - `docs/WORKLOG.md` is append-only historical evidence;
 - `README.md` describes only commands and behavior that currently exist;

@@ -1,17 +1,17 @@
 # Project state
 
-Updated: 2026-10-17
+Updated: 2026-10-19
 
 ## Current stage
 
-The core lab through BI-080 remains implemented, and BI-090 independently qualified its prior acceptance claim. The audit is complete: every specification, accepted-ADR, and completed-backlog row has a final evidence status; fresh offline, clean-export, integration, recovery, exact-inspection, redaction, and cleanup gates passed; and its findings have bounded follow-up tasks. BI-091 and BI-092 are complete: ADR 0003 now has a fully implemented, tested, and documented REST logical-run manifest contract, closing the BI-090-F02 follow-up without reopening completed product tasks or adding Possible extensions. BI-093 is complete: shared backend-error normalization and source-owned terminal boundaries now give identified REST, file, and snapshot storage failures one redacted terminal event plus one final summary, with confirmed-only counters, handled exit `4`, retained evidence, operator documentation, and isolated unavailable-S3 acceptance across all three commands. BI-094 is complete: the total REST page deadline now covers unbuffered successful-body transport chunks, with deterministic fetcher/service cleanup, no-partial-persistence, stable terminal-output evidence, current operator documentation, and full live/clean-export regression acceptance. BI-095 is complete: local preflight delegates the full application surface to `AppConfig.from_env()` while retaining separate Compose-only checks, and the atomic initializer now has explicit full-validation failure, redaction, cleanup, and byte-stable rerun acceptance. BI-096 planning is complete, but its first slice-1 candidate stopped at a required gate: commit `5ee3781f8955e109b6890b117b9070fdd718ad5b` had clean detached provenance, a verified 170-path inventory, and all 19 F01 paths, while locked `make lint` failed on two committed test import groups. Live attestation was not started. The project owner then authorized the bounded proposed correction: only import-group whitespace changed in those two tests, focused no-cache Ruff and 67 tests pass, and BI-096 remains in progress until a new immutable commit passes the complete detached slice-1 rerun.
+The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete: BI-091 and BI-092 implemented the accepted ADR 0003 REST logical-run manifest; BI-093 normalized terminal storage failures; BI-094 enforced the total REST response deadline; BI-095 aligned local preflight with complete application configuration; and BI-096 attested clean-commit reproducibility. BI-096's first candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b` failed fresh Ruff lint and remains preserved as failed evidence. After the authorized import-group-only correction, replacement commit `a4ef6d34fad5629c992385c26ede74a12b937563` passed clean detached provenance, the exact 19-path F01 matrix, every repository gate, isolated integration, the complete clean-export walkthrough, exact inspection, protected-fingerprint comparison, and bounded cleanup. The project owner has accepted terminal backlog state: every recorded task is done and no task is active. Future improvements or corrections remain allowed, but must first be represented as a new explicitly authorized atomic backlog task.
 
 ```yaml
-active_task_id: BI-096
-last_completed_task_id: BI-095
+active_task_id: null
+last_completed_task_id: BI-096
 ```
 
-`tasks/backlog.yaml` is canonical for task status and the active task. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`.
+`tasks/backlog.yaml` is canonical for task status and the active or terminal state. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`; `null` is valid only while every recorded task is `done`.
 
 ## Completed
 
@@ -174,11 +174,13 @@ last_completed_task_id: BI-095
 - valid initializer reruns execute the same complete preflight, preserve exact bytes and mode `0600`, and never regenerate credentials;
 - Make help and README now distinguish complete application validation from Compose-only port, Garage RPC-secret, and placeholder checks, and explicitly make no connectivity, credential-acceptance, readiness, or `SOURCE_SEED` claim;
 - the complete BI-095 focused, offline, integration, clean-export, LSP, policy, and verification matrix passes, so BI-095 is done and BI-096 is selected;
-- BI-096 has an execution-ready two-slice plan covering immutable commit selection, a separate clean detached checkout, canonical Git-tree inventory, exact F01 path closure, repository gates, isolated integration, the full clean-export walkthrough, exact final inventory, bounded cleanup, protected fingerprints, and a documentation-only attestation report.
+- BI-096 has an execution-ready two-slice plan covering immutable commit selection, a separate clean detached checkout, canonical Git-tree inventory, exact F01 path closure, repository gates, isolated integration, the full clean-export walkthrough, exact final inventory, bounded cleanup, protected fingerprints, and a documentation-only attestation report;
+- BI-096 replacement commit `a4ef6d34fad5629c992385c26ede74a12b937563` passes both slices: clean committed source closure, repository gates, 76 isolated integration tests, bounded recovery, the complete clean-export walkthrough, exact `6/8/1/2/0` inspection, protected fingerprints, and exact cleanup all pass without changing product behavior or BI-090 history;
+- the project owner accepted terminal backlog state, BI-096 is done, and `active_task_id: null` records that no task is currently authorized or active.
 
 ## Not completed
 
-- BI-096: candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b` failed the required lint gate after provenance and source closure passed; repository verification, isolated integration, clean export, exact inspection, and protected-state evidence remain unexecuted for an acceptable clean commit.
+- No authorized backlog task remains. Future improvements and corrections are permitted but are not current project work until recorded as a new atomic task.
 
 ## Known limitations and risks
 
@@ -186,21 +188,30 @@ last_completed_task_id: BI-095
 - Concurrent ingestion writers are outside the core contract.
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
 - Ignored `.env` files created before BI-070 slice 1 must be refreshed with the committed HTTP, `FILE_*`, PostgreSQL timeout, and `SNAPSHOT_*` settings before integration targets or ingestion CLIs can load complete configuration.
-- BI-090-F01–F05 remain the authoritative findings for the frozen audit baseline. Their follow-ups are resolved by accepted ADR 0003 plus completed BI-092 for F02, completed BI-093 for F03, completed BI-094 for F04, and completed BI-095 for F05. BI-096 remains independently actionable for F01. The exact original failed traceability rows and follow-up mapping remain in `docs/audits/BI-090.md`.
+- BI-090-F01–F05 remain the authoritative findings for the frozen audit baseline. Their follow-ups have technical PASS evidence from BI-096 for F01, accepted ADR 0003 plus completed BI-092 for F02, completed BI-093 for F03, completed BI-094 for F04, and completed BI-095 for F05. BI-096 does not retroactively reclassify F01's original dirty baseline. The exact original failed traceability rows and follow-up mapping remain in `docs/audits/BI-090.md`.
 
 ## Latest validation
 
-2026-10-17, BI-096 slice 1:
+2026-10-19, terminal backlog closeout:
 
-- candidate commit `5ee3781f8955e109b6890b117b9070fdd718ad5b`, tree `3a17d76af2afb4fe247108238af6650c57ce2668`, began and ended with zero-byte status and diffs in a separate detached checkout;
-- the canonical NUL-safe 170-path inventory has SHA-256 `737d4dd048c24f4a77c1bbbaa5b8b5662bf2585ba4104562b1642ba4150fd3ba`; all 19 F01-required snapshot, demo, clean-export, test, operator-document, and plan paths resolved as committed blobs;
-- doctor, repository policy, corrected backlog-schema/state validation, `git diff --check`, and `uv sync --locked --all-groups` — PASS;
-- `make lint` — FAIL with Ruff 0.17.0 `I001` findings in `tests/unit/test_api_retry.py` and `tests/unit/test_api_sources.py`; no candidate file was changed;
-- `make test`, Compose rendering, `./scripts/verify.sh`, `make integration`, clean export, exact live inspection, and protected-resource fingerprints — NOT RUN because the slice-1 stop rule applied;
-- the clean detached checkout was removed after evidence capture; the failed attestation and ignored logs are recorded in `docs/audits/BI-096.md` and `artifacts/audit/BI-096/slice1/`;
-- documentation-worktree `./scripts/verify.sh` — PASS with 682 offline tests and 76 integration tests deselected, but it reused the existing Ruff cache and is not substituted for the fresh detached-checkout lint failure;
-- owner-authorized import grouping in `tests/unit/test_api_retry.py` and `tests/unit/test_api_sources.py` — PASS under `ruff check --no-cache`; both focused files pass all 67 tests and active LSP diagnostics report no findings.
+- the pre-change policy rejected a simulated `active_task_id: null` state because it still required one active task, establishing the terminal-state gap;
+- repository policy — PASS with synchronized `active_task_id: null`, every task `done`, and `last_completed_task_id: BI-096`;
+- `make lint` — PASS; `make test` — PASS with 682 tests and 76 integration tests deselected;
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests, and Compose rendering;
+- no product/runtime behavior changed, so integration and clean-export checks were not rerun; the latest live acceptance remains the BI-096 evidence below.
+
+### Latest live validation
+
+2026-10-17, BI-096 slice 2:
+
+- exact replacement commit `a4ef6d34fad5629c992385c26ede74a12b937563`, tree `f4c9a9658a417aca5f24472a8f4adbd445732e26`, remained detached with zero-byte status and diffs before and after live acceptance;
+- isolated `make integration` — PASS in 155.749 seconds with 76 integration tests and the bounded persistence/reset recovery exercise;
+- clean-export walkthrough — PASS in 39.920 seconds outer duration; emitted `cleanup_verified=true`, measured 12.295 seconds of setup, a 2.183-second warm happy path, and 35.021 seconds through exact inspection;
+- exact final inventory — PASS with 6 raw, 8 manifest, 1 archive, 2 rejected, and 0 landing objects plus strict aggregate, checksum, disposition, and snapshot validation;
+- integration and clean-export containers, networks, volumes, environments, and exact test-owned image tags are absent; all three protected default-project volume fingerprints are unchanged;
+- the detached checkout was removed after evidence capture; retained logs are under ignored `artifacts/audit/BI-096/slice2/`;
+- no product code, test behavior, dependency, runtime configuration, contract, ADR, README behavior, delivery claim, or BI-090 historical evidence changed.
 
 ## Next atomic step
 
-Commit the bounded BI-096 correction and evidence as one immutable revision, then rerun the complete BI-096 slice 1 from a fresh detached checkout before any live slice-2 command.
+No implementation task is scheduled. When the project owner requests a concrete improvement or correction, add one bounded backlog task, select it as `active_task_id`, and synchronize this state before implementation.
