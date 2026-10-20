@@ -915,3 +915,27 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Integration and clean-export checks were NOT RUN because no product/runtime behavior, dependency, configuration, object contract, ADR, or delivery semantics changed.
 - Marked BI-098 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-098`.
 - Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.
+
+## 2026-10-20 — BI-099 cohesive Git history rewrite planning
+
+- The project owner explicitly authorized the previously recommended history cleanup from terminal backlog state.
+- Created and activated BI-099 with a history-only boundary: preserve product/runtime behavior, tests, dependencies, contracts, ADRs, and historical audit text.
+- Fixed the original pre-task tip as `c6d4b1537b3deeda0d5d1568db97a27394dfd207` with tree `1b8f1f3ae0d8732b5e51232e93074d5ea0e469bd` and required a permanent archive tag because BI-090 and BI-096 cite exact old commit IDs.
+- Planned targeted task-focused splits for the oversized BI-050, BI-060, BI-070/080/090, BI-091/092/093, BI-094/095, and BI-096/terminal-closeout regions instead of imposing an arbitrary line-count threshold.
+- Required consistent commit subjects and concise bodies without manufacturing historical validation claims, plus exact tree comparison, linear-history checks, repository policy, lint, offline tests, and full verification.
+- Startup `./scripts/doctor.sh` — PASS with Python 3.12, uv, Git, Docker, and Docker Compose available and no warnings.
+- Next task: commit the BI-099 plan, create `refs/tags/archive/pre-bi099-history`, and perform only the bounded history rewrite.
+
+## 2026-10-20 — BI-099 cohesive Git history rewrite completion
+
+- Committed the active-task plan, then created annotated tag `archive/pre-bi099-history` at exact original tip `c6d4b1537b3deeda0d5d1568db97a27394dfd207`; peeling the tag reproduces that full ID and keeps every BI-090/BI-096 candidate object reachable.
+- Rebuilt `main` through a root interactive rebase and replaced seven oversized regions with task-focused REST, file, snapshot, demo, audit, ADR, storage-failure, deadline, configuration, attestation, and terminal-policy commits.
+- Verified the cumulative tree ID at every edited rebase stop before continuing. Rewritten pre-task commit `80df9640874b7af381a36d4ae7807b0f18c1ce2f` and archived original tip share exact tree `1b8f1f3ae0d8732b5e51232e93074d5ea0e469bd`; their Git diff is empty.
+- `main` remains linear and grew from 24 to 36 commits. Median files per commit fell from 16 to 9.5, commits over 3,000 changed lines fell from four to two, and commits touching more than 20 files fell from eight to five.
+- Added concise `type(scope): outcome (BI-NNN)` subjects and explanatory bodies to every replacement commit without claiming validation beyond the existing historical worklog.
+- Refreshed active LSP diagnostics over eleven representative rewritten Python paths — PASS with no findings. An earlier workspace-wide probe observed stale pre-rebase symbols; the explicit refreshed probe and strict mypy gate both passed against the final tree.
+- Repository policy and `git diff --check` — PASS; `make lint` — PASS; `make test` — PASS with 683 offline tests and 76 integration tests deselected.
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 683 offline tests, and Compose rendering.
+- Integration and clean-export checks were NOT RUN because BI-099 changes only Git history and handoff documentation and the rewritten product tree is byte-identical to the already validated original tip.
+- Marked BI-099 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-099`.
+- Next task: none scheduled. If a shared remote is introduced, first authorize one bounded operational task to publish rewritten `main` and the archive tag together after confirming no consumer depends on the old branch tip.

@@ -354,3 +354,19 @@ tasks:
       - README is materially shorter than the prior 308-line version and retains the specification-required failure exercises in a compact form.
       - The linked detailed guide preserves the complete validated operator reference, including setup, lifecycle, source commands, recovery states, demos, command index, and limitations.
       - Documentation tests, repository policy, lint, offline tests, and full verification pass with no product/runtime behavior change.
+
+  - id: BI-099
+    title: Rewrite Git history into cohesive commits
+    status: done
+    depends_on: [BI-098]
+    scope:
+      - Preserve the original pre-rewrite history through an explicit archive reference because accepted audit evidence cites exact commit IDs.
+      - Replace the largest mixed or multi-task commits with smaller task-focused commits and consistent explanatory messages.
+      - Preserve the exact pre-task repository tree, linear topology, historical audit text, product behavior, tests, dependencies, contracts, and ADRs.
+      - Record the rewrite method, mapping, structural checks, validation, and synchronized terminal handoff.
+    acceptance:
+      - The original c6d4b1537b3deeda0d5d1568db97a27394dfd207 tip remains reachable through refs/tags/archive/pre-bi099-history.
+      - Rewritten main has task-focused replacements for the selected BI-050, BI-060, BI-070/080/090, BI-091/092/093, BI-094/095, and BI-096/terminal-closeout commits.
+      - Rewritten subjects use a consistent type(scope) outcome style and commit bodies state purpose and scope without inventing validation evidence.
+      - The rewritten pre-BI-099 tree ID equals the archived original tip tree and their Git diff is empty.
+      - Repository policy, lint, offline tests, and full verification pass with no product/runtime behavior change.

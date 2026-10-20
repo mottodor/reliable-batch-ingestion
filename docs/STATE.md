@@ -4,11 +4,11 @@ Updated: 2026-10-20
 
 ## Current stage
 
-The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete: BI-091 and BI-092 implemented the accepted ADR 0003 REST logical-run manifest; BI-093 normalized terminal storage failures; BI-094 enforced the total REST response deadline; BI-095 aligned local preflight with complete application configuration; and BI-096 attested clean-commit reproducibility. BI-096's first candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b` failed fresh Ruff lint and remains preserved as failed evidence. After the authorized import-group-only correction, replacement commit `a4ef6d34fad5629c992385c26ede74a12b937563` passed clean detached provenance, the exact 19-path F01 matrix, every repository gate, isolated integration, the complete clean-export walkthrough, exact inspection, protected-fingerprint comparison, and bounded cleanup. BI-097 moved the session navigation entry point to `docs/START_HERE.md`, updated active references and policy enforcement, and changed no product/runtime behavior. BI-098 restructured the root README into a concise learner entry point and preserved the complete validated command and recovery reference in `docs/guides/operator-guide.md`. Every recorded task is done and no task is active.
+The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete: BI-091 and BI-092 implemented the accepted ADR 0003 REST logical-run manifest; BI-093 normalized terminal storage failures; BI-094 enforced the total REST response deadline; BI-095 aligned local preflight with complete application configuration; and BI-096 attested clean-commit reproducibility. BI-096's exact original audit candidates remain reachable in the archived pre-rewrite history. BI-097 moved the session navigation entry point to `docs/START_HERE.md`, BI-098 restructured the learner README while preserving the full operator guide, and BI-099 replaced the largest mixed Git commits with smaller task-focused series. The rewritten pre-task tree is byte-identical to the original tip; historical audit text, runtime behavior, tests, dependencies, contracts, and ADRs are unchanged. Every recorded task is done and no task is active.
 
 ```yaml
 active_task_id: null
-last_completed_task_id: BI-098
+last_completed_task_id: BI-099
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active or terminal state. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`; `null` is valid only while every recorded task is `done`.
@@ -179,7 +179,9 @@ last_completed_task_id: BI-098
 - BI-097 moved the session entry point from the repository root to `docs/START_HERE.md`, updated agent guidance and README navigation, and added a policy guard against path regression;
 - BI-098 reduced the root README from 308 to 116 lines, centered it on the learning goal and happy path, retained all nine mandatory failure exercises in a compact state/recovery table, and moved the complete validated operator reference to `docs/guides/operator-guide.md`;
 - documentation checks now enforce the concise learner path, operator-guide details, mandatory recovery exercises, and links to source-specific contracts;
-- the project is again in terminal backlog state, BI-098 is done, and `active_task_id: null` records that no task is currently authorized or active.
+- BI-098 is done, and BI-099 preserved the complete original history under `archive/pre-bi099-history` while replacing seven oversized history regions with task-focused commits;
+- the rewritten pre-task commit `80df9640874b7af381a36d4ae7807b0f18c1ce2f` and archived original tip `c6d4b1537b3deeda0d5d1568db97a27394dfd207` share tree `1b8f1f3ae0d8732b5e51232e93074d5ea0e469bd` and have an empty diff;
+- the project is again in terminal backlog state, BI-099 is done, and `active_task_id: null` records that no task is currently authorized or active.
 
 ## Not completed
 
@@ -194,6 +196,19 @@ last_completed_task_id: BI-098
 - BI-090-F01–F05 remain the authoritative findings for the frozen audit baseline. Their follow-ups have technical PASS evidence from BI-096 for F01, accepted ADR 0003 plus completed BI-092 for F02, completed BI-093 for F03, completed BI-094 for F04, and completed BI-095 for F05. BI-096 does not retroactively reclassify F01's original dirty baseline. The exact original failed traceability rows and follow-up mapping remain in `docs/audits/BI-090.md`.
 
 ## Latest validation
+
+2026-10-20, BI-099 cohesive Git history rewrite:
+
+- annotated tag `archive/pre-bi099-history` resolves to original tip `c6d4b1537b3deeda0d5d1568db97a27394dfd207`; all exact historical audit candidates remain reachable;
+- `main` is linear and contains 36 commits instead of 24, with seven oversized regions replaced by task-focused series using explanatory commit bodies;
+- rewritten pre-task tree comparison and empty Git diff against the archived original tip — PASS;
+- median files per commit improved from 16 to 9.5, commits over 3,000 changed lines from four to two, and commits touching more than 20 files from eight to five;
+- refreshed active LSP diagnostics over the representative rewritten Python paths — PASS with no findings;
+- repository policy and `git diff --check` — PASS;
+- `make lint` — PASS with Ruff, formatting, and strict mypy over 81 source files;
+- `make test` — PASS with 683 offline tests and 76 integration tests deselected;
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy, 683 offline tests, and Compose rendering;
+- integration and clean-export checks were NOT RUN because the rewritten pre-task product tree is byte-identical and BI-099 changes only Git history and handoff documentation.
 
 2026-10-20, BI-098 learner-facing README restructure:
 
@@ -226,4 +241,4 @@ last_completed_task_id: BI-098
 
 ## Next atomic step
 
-No implementation task is scheduled. When the project owner requests a concrete improvement or correction, add one bounded backlog task, select it as `active_task_id`, and synchronize this state before implementation.
+No implementation task is scheduled. If this repository is later connected to a shared remote, create one authorized operational task to publish rewritten `main` and `archive/pre-bi099-history` together after confirming that no consumer depends on the old branch tip.

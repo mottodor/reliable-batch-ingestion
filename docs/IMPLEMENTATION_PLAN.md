@@ -236,6 +236,18 @@ Outcome: the completed core source set is reproducible from one exact clean comm
 
 Outcome: session navigation is colocated with project documentation and the repository gate prevents the legacy root path from returning.
 
+## Maintenance — cohesive Git history rewrite (`BI-099`)
+
+Detailed execution plan: [`docs/plans/BI-099.md`](plans/BI-099.md).
+
+- preserve the exact original history through a named archive reference;
+- split the largest mixed commits at task and independently reviewable behavior boundaries;
+- normalize rewritten subjects and add concise purpose, boundary, and validation context;
+- retain historical audit text and exact cited objects rather than relabeling rewritten commits as audited candidates;
+- prove byte-identical pre-task trees, linear topology, and passing repository gates.
+
+Outcome: `main` presents reviewable, task-focused changes while the original audited history remains reachable and product behavior is unchanged.
+
 ## Common quality gates
 
 For every gate:
