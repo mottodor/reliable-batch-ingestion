@@ -386,3 +386,19 @@ tasks:
       - Rewritten main remains linear and its pre-BI-100 tree is unchanged.
       - Current documentation clearly distinguishes historical SHA text from locally resolvable Git objects.
       - Repository policy, lint, offline tests, and full verification pass with no product/runtime behavior change.
+
+  - id: BI-101
+    title: Enforce commit-message format
+    status: done
+    depends_on: [BI-100]
+    scope:
+      - Define one exact type(scope) outcome and BI task-reference contract for commits after BI-100.
+      - Add one standard-library validator shared by a versioned commit-msg hook and the repository verification gate.
+      - Add explicit idempotent hook installation and manual history-check Make targets.
+      - Document the allowed values, enforcement boundary, bypass behavior, and contributor workflow without rewriting earlier history.
+    acceptance:
+      - Valid commit subjects pass and malformed type, scope, spacing, outcome, task suffix, unknown task, and excessive length fail with bounded diagnostics.
+      - The versioned commit-msg hook rejects invalid messages and accepts a valid subject referencing BI-101.
+      - Repository policy validates every commit after BI-100 so local hook bypass does not bypass the durable gate.
+      - Hook installation sets core.hooksPath to .githooks explicitly and idempotently.
+      - The BI-101 commit itself, repository policy, lint, offline tests, and full verification pass.

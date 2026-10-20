@@ -961,3 +961,28 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Integration and clean-export checks were NOT RUN because no product/runtime tree changed.
 - Marked BI-100 done, restored terminal backlog state, and scheduled one final post-commit reflog expiration/prune so the cleanup commit itself leaves no reflog retention.
 - Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.
+
+## 2026-10-20 — BI-101 commit-message enforcement planning
+
+- The project owner explicitly authorized the recommended commit-message policy task from terminal backlog state.
+- Created and activated BI-101 with the exact required subject shape `type(scope): outcome (BI-NNN)`, an allow-list of ten types, mandatory lowercase kebab-case scope, lowercase-starting outcome, existing backlog task reference, and a 100-character ceiling.
+- Fixed BI-100 commit `a049faf1df760b4794970f9ef81feadf5609815b` as the enforcement boundary so earlier accepted history is not rewritten.
+- Planned one standard-library validator shared by an executable `.githooks/commit-msg`, a manual Make target, and repository policy; local `--no-verify` may skip the hook but cannot pass the durable repository gate with an invalid committed subject.
+- Hook installation remains explicit and idempotent through `make hooks-install`; no import, test, setup, or verify command silently changes Git configuration.
+- Startup `./scripts/doctor.sh` — PASS with no warnings.
+- Next task: add and run the failing BI-101 contract tests before implementing the validator or hook.
+
+## 2026-10-20 — BI-101 commit-message enforcement completion
+
+- Added the focused test module first and recorded the expected collection failure because `scripts.check_commit_messages` did not exist.
+- Implemented one standard-library validator for direct subjects, Git message files, and every committed revision after BI-100 boundary `a049faf1df760b4794970f9ef81feadf5609815b`; unknown backlog tasks and all malformed contract forms fail with bounded diagnostics.
+- Added executable `.githooks/commit-msg`, explicit idempotent `make hooks-install`, and manual `make commit-message-check`; configured this clone with exact `core.hooksPath=.githooks`.
+- Wired the range validator into repository policy, so `git commit --no-verify` may bypass only the local hook and cannot pass `make policy` or `./scripts/verify.sh` with an invalid durable subject.
+- Added `docs/guides/commit-messages.md` and README navigation covering allowed types, mandatory scope/outcome/task form, 100-character limit, installation, manual checks, bodies, merges/fixups, and bypass semantics.
+- Focused policy tests — PASS with 28 cases, including every type, boundaries, malformed messages, unknown task, CLI, temporary-Git range bypass, executable hook, Make/policy wiring, docs, and installed config.
+- A real `git commit --allow-empty -m 'invalid subject'` invocation was rejected by the installed hook with exit `1`; `HEAD` remained unchanged.
+- Active LSP diagnostics over the validator and focused tests — PASS with no findings; `make lint` — PASS with strict mypy over 82 source files.
+- `make test` — PASS with 711 offline tests and 76 integration tests deselected; `./scripts/verify.sh` — PASS with commit-history policy, locked sync, static checks, offline tests, and Compose rendering.
+- Integration and clean-export checks were NOT RUN because no ingestion/runtime behavior, dependency, object contract, ADR, or infrastructure changed.
+- Marked BI-101 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-101`.
+- Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.

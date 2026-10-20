@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
+commit_message_policy_base=a049faf1df760b4794970f9ef81feadf5609815b
 
 failures=0
 
@@ -146,6 +147,10 @@ for dependency_id in "${dependency_ids[@]}"; do
     fail "backlog dependency does not identify exactly one task: $dependency_id"
   fi
 done
+
+if ! python3 scripts/check_commit_messages.py --commits-after "$commit_message_policy_base"; then
+  fail "commit message policy failed after BI-100 boundary"
+fi
 
 if ((failures > 0)); then
   printf '\nRepository policy result: %d failure(s)\n' "$failures" >&2

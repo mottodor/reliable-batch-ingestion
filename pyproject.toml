@@ -42,7 +42,7 @@ mypy_path = ["src", ".", "tests"]
 
 [tool.pyright]
 pythonVersion = "3.12"
-include = ["src", "mock_api", "tests"]
+include = ["src", "mock_api", "scripts", "tests"]
 extraPaths = ["src", "."]
 
 [[tool.mypy.overrides]]

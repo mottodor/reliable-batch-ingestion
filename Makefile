@@ -6,9 +6,10 @@ COMPOSE_PROJECT_NAME ?= reliable-batch-ingestion
 COMPOSE_WAIT_TIMEOUT_SECONDS ?= 60
 DEMO_TIMEOUT_SECONDS ?= 210
 SOURCE_SEED ?= 20260901
+COMMIT_MESSAGE_POLICY_BASE ?= a049faf1df760b4794970f9ef81feadf5609815b
 export SOURCE_SEED
 
-.PHONY: help doctor policy setup lock format lint test fixtures fixtures-check init-local-env check-local-env ingest-api ingest-file ingest-postgres demo-happy-path demo-duplicate demo-api-retry demo-bad-file demo-recovery demo-inspect up down logs seed integration reset reset-destructive verify
+.PHONY: help doctor policy hooks-install commit-message-check setup lock format lint test fixtures fixtures-check init-local-env check-local-env ingest-api ingest-file ingest-postgres demo-happy-path demo-duplicate demo-api-retry demo-bad-file demo-recovery demo-inspect up down logs seed integration reset reset-destructive verify
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -16,8 +17,16 @@ help: ## Show available commands
 doctor: ## Check the local development environment
 	@./scripts/doctor.sh
 
-policy: ## Check repository language and task-state consistency
+policy: ## Check repository language, task state, and new commit messages
 	@./scripts/check-repository-policy.sh
+
+hooks-install: ## Configure this clone to use the versioned Git hooks
+	@git config --local core.hooksPath .githooks
+	@git config --local --get core.hooksPath | grep -Fx .githooks >/dev/null
+	@printf 'Git hooks installed: core.hooksPath=.githooks\n'
+
+commit-message-check: ## Validate commits after the BI-100 policy boundary
+	@python3 scripts/check_commit_messages.py --commits-after "$(COMMIT_MESSAGE_POLICY_BASE)"
 
 setup: ## Install all locked dependencies
 	$(UV) sync --locked --all-groups

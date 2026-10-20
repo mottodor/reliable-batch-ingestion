@@ -111,6 +111,7 @@ All waits and retries are bounded. Unit tests do not use public network services
 | Study IDs, object keys, manifests, and storage invariants | [Core contracts](docs/contracts/core-contracts.md) and [storage contract](docs/contracts/storage-contract.md) |
 | Read the complete learning requirements | [Product specification](docs/specification/batch-ingestion.md) |
 | Review architectural trade-offs | [Architecture decisions](docs/adr/README.md) |
+| Prepare task-linked commits | [Commit-message policy](docs/guides/commit-messages.md) |
 | Contribute with a coding agent | [Session navigation](docs/START_HERE.md) and [agent rules](AGENTS.md) |
 
 `.env.example` contains safe placeholders only. Never commit the generated `.env`, access keys, or passwords.

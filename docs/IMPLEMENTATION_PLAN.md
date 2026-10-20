@@ -260,6 +260,18 @@ Detailed execution plan: [`docs/plans/BI-100.md`](plans/BI-100.md).
 
 Outcome: only the cohesive rewritten history remains in the local Git object database, while documentation truthfully records the superseding retention decision.
 
+## Maintenance — commit-message enforcement (`BI-101`)
+
+Detailed execution plan: [`docs/plans/BI-101.md`](plans/BI-101.md).
+
+- define one exact `type(scope): outcome (BI-NNN)` subject contract;
+- share one standard-library validator between a versioned `commit-msg` hook and repository history checks;
+- enforce only commits after BI-100 so earlier history remains unchanged;
+- add explicit idempotent hook installation and manual check commands;
+- prove hook rejection/acceptance, bypass-resistant repository enforcement, and self-compliance of BI-101.
+
+Outcome: future durable commits remain task-linked and consistently formatted both locally and in the full repository gate.
+
 ## Common quality gates
 
 For every gate:

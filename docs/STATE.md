@@ -4,11 +4,11 @@ Updated: 2026-10-20
 
 ## Current stage
 
-The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete. BI-097 moved the session navigation entry point, BI-098 restructured the learner README, and BI-099 replaced the largest mixed Git commits with smaller task-focused series. After the project owner confirmed that no external consumer depends on the old tip, BI-100 removed the temporary archive tag, expired local reflogs, and pruned unreachable pre-rewrite objects. Only rewritten `main` remains locally; historical audit/worklog SHA strings are retained as immutable evidence text but no longer resolve when unique to the deleted history. Product behavior, tests, dependencies, contracts, and ADRs are unchanged. Every recorded task is done and no task is active.
+The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete. BI-097 moved the session navigation entry point, BI-098 restructured the learner README, BI-099 rewrote oversized commits into task-focused series, and BI-100 removed the obsolete archived history after owner authorization. BI-101 now enforces `type(scope): outcome (BI-NNN)` for every commit after BI-100 through one versioned `commit-msg` hook and the durable repository gate. The current clone uses `core.hooksPath=.githooks`; product behavior, dependencies, contracts, and ADRs are unchanged. Every recorded task is done and no task is active.
 
 ```yaml
 active_task_id: null
-last_completed_task_id: BI-100
+last_completed_task_id: BI-101
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active or terminal state. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`; `null` is valid only while every recorded task is `done`.
@@ -183,7 +183,9 @@ last_completed_task_id: BI-100
 - the rewritten pre-task commit `80df9640874b7af381a36d4ae7807b0f18c1ce2f` and archived original tip `c6d4b1537b3deeda0d5d1568db97a27394dfd207` share tree `1b8f1f3ae0d8732b5e51232e93074d5ea0e469bd` and have an empty diff;
 - BI-100 applied the owner's superseding retention decision: `archive/pre-bi099-history` is deleted, all local reflogs were expired, unreachable old-history objects were pruned, and the representative old unique SHA values no longer resolve;
 - pre-BI-100 commit `0c85343b3318ad0375ce5a6b2547f65f92203b81` and tree `ab24eb3895e9a01137e9aa82e6cb52c40796e668` remain unchanged under linear `main`;
-- the project is again in terminal backlog state, BI-100 is done, and `active_task_id: null` records that no task is currently authorized or active.
+- BI-101 adds one standard-library commit-message validator, an executable versioned hook, explicit idempotent installation, Make and repository-policy range checks after BI-100, contributor guidance, and 28 focused tests;
+- the current clone has `core.hooksPath=.githooks`, an actual invalid commit attempt is rejected without moving `HEAD`, and durable policy catches invalid subjects even when a local hook is bypassed;
+- the project is again in terminal backlog state, BI-101 is done, and `active_task_id: null` records that no task is currently authorized or active.
 
 ## Not completed
 
@@ -199,6 +201,19 @@ last_completed_task_id: BI-100
 - After BI-100, SHA values unique to the deleted pre-rewrite history remain documentary evidence identifiers only; this local repository intentionally no longer retains the corresponding Git objects.
 
 ## Latest validation
+
+2026-10-20, BI-101 commit-message enforcement:
+
+- focused test collection failed first because `scripts.check_commit_messages` did not exist, establishing the expected red phase;
+- focused commit-message tests — PASS with 28 cases;
+- `make hooks-install` — PASS and local `core.hooksPath` is exactly `.githooks`;
+- a real invalid `git commit --allow-empty` attempt — correctly rejected with exit `1` and unchanged `HEAD`;
+- `make commit-message-check` and repository policy — PASS;
+- active LSP diagnostics over the validator and its test module — PASS with no findings;
+- `make lint` — PASS with Ruff, formatting, and strict mypy over 82 source files;
+- `make test` — PASS with 711 offline tests and 76 integration tests deselected;
+- `./scripts/verify.sh` — PASS with doctor, policy including commit history, locked sync, Ruff, formatting, strict mypy, 711 offline tests, and Compose rendering;
+- integration and clean-export checks were NOT RUN because no ingestion/runtime behavior or infrastructure changed.
 
 2026-10-20, BI-100 archived-history removal:
 
