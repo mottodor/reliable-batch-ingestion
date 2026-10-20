@@ -228,6 +228,14 @@ Detailed execution plan: [`docs/plans/BI-096.md`](plans/BI-096.md).
 
 Outcome: the completed core source set is reproducible from one exact clean committed checkout, while the original BI-090 baseline remains truthfully classified as a dirty worktree.
 
+## Maintenance — session entry-point relocation (`BI-097`)
+
+- move the repository navigation entry point from the root to `docs/START_HERE.md`;
+- update active agent guidance, README navigation, and path-sensitive policy checks;
+- preserve historical worklog wording and leave product behavior and architectural contracts unchanged.
+
+Outcome: session navigation is colocated with project documentation and the repository gate prevents the legacy root path from returning.
+
 ## Common quality gates
 
 For every gate:

@@ -4,11 +4,11 @@ Updated: 2026-10-19
 
 ## Current stage
 
-The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete: BI-091 and BI-092 implemented the accepted ADR 0003 REST logical-run manifest; BI-093 normalized terminal storage failures; BI-094 enforced the total REST response deadline; BI-095 aligned local preflight with complete application configuration; and BI-096 attested clean-commit reproducibility. BI-096's first candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b` failed fresh Ruff lint and remains preserved as failed evidence. After the authorized import-group-only correction, replacement commit `a4ef6d34fad5629c992385c26ede74a12b937563` passed clean detached provenance, the exact 19-path F01 matrix, every repository gate, isolated integration, the complete clean-export walkthrough, exact inspection, protected-fingerprint comparison, and bounded cleanup. The project owner has accepted terminal backlog state: every recorded task is done and no task is active. Future improvements or corrections remain allowed, but must first be represented as a new explicitly authorized atomic backlog task.
+The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete: BI-091 and BI-092 implemented the accepted ADR 0003 REST logical-run manifest; BI-093 normalized terminal storage failures; BI-094 enforced the total REST response deadline; BI-095 aligned local preflight with complete application configuration; and BI-096 attested clean-commit reproducibility. BI-096's first candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b` failed fresh Ruff lint and remains preserved as failed evidence. After the authorized import-group-only correction, replacement commit `a4ef6d34fad5629c992385c26ede74a12b937563` passed clean detached provenance, the exact 19-path F01 matrix, every repository gate, isolated integration, the complete clean-export walkthrough, exact inspection, protected-fingerprint comparison, and bounded cleanup. BI-097 moved the session navigation entry point to `docs/START_HERE.md`, updated active references and policy enforcement, and changed no product/runtime behavior. Every recorded task is done and no task is active.
 
 ```yaml
 active_task_id: null
-last_completed_task_id: BI-096
+last_completed_task_id: BI-097
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active or terminal state. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`; `null` is valid only while every recorded task is `done`.
@@ -16,7 +16,7 @@ last_completed_task_id: BI-096
 ## Completed
 
 - the product specification and repository-local agent workflow are recorded;
-- BI-007 keeps only the implementation plan, state, and worklog at the `docs/` root and groups the remaining documentation under `specification/`, `contracts/`, `ingestion/`, `adr/`, and `plans/`;
+- BI-007 established the responsibility-based documentation layout, and BI-097 later colocated the session navigation entry point at `docs/START_HERE.md`; specification, contract, ingestion, ADR, and plan documents remain grouped by responsibility;
 - S3-compatible Garage `dxflrs/garage:v2.4.1` was selected in ADR 0001;
 - the Python 3.12/uv foundation, quality gates, and Git repository exist;
 - typed runtime configuration is loaded only through an explicit call and redacts secrets from representations;
@@ -176,7 +176,8 @@ last_completed_task_id: BI-096
 - the complete BI-095 focused, offline, integration, clean-export, LSP, policy, and verification matrix passes, so BI-095 is done and BI-096 is selected;
 - BI-096 has an execution-ready two-slice plan covering immutable commit selection, a separate clean detached checkout, canonical Git-tree inventory, exact F01 path closure, repository gates, isolated integration, the full clean-export walkthrough, exact final inventory, bounded cleanup, protected fingerprints, and a documentation-only attestation report;
 - BI-096 replacement commit `a4ef6d34fad5629c992385c26ede74a12b937563` passes both slices: clean committed source closure, repository gates, 76 isolated integration tests, bounded recovery, the complete clean-export walkthrough, exact `6/8/1/2/0` inspection, protected fingerprints, and exact cleanup all pass without changing product behavior or BI-090 history;
-- the project owner accepted terminal backlog state, BI-096 is done, and `active_task_id: null` records that no task is currently authorized or active.
+- BI-097 moved the session entry point from the repository root to `docs/START_HERE.md`, updated agent guidance and README navigation, and added a policy guard against path regression;
+- the project is again in terminal backlog state, BI-097 is done, and `active_task_id: null` records that no task is currently authorized or active.
 
 ## Not completed
 
@@ -192,12 +193,11 @@ last_completed_task_id: BI-096
 
 ## Latest validation
 
-2026-10-19, terminal backlog closeout:
+2026-10-19, BI-097 session-navigation relocation:
 
-- the pre-change policy rejected a simulated `active_task_id: null` state because it still required one active task, establishing the terminal-state gap;
-- repository policy — PASS with synchronized `active_task_id: null`, every task `done`, and `last_completed_task_id: BI-096`;
-- `make lint` — PASS; `make test` — PASS with 682 tests and 76 integration tests deselected;
-- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests, and Compose rendering;
+- the new path policy failed before the move because `docs/START_HERE.md` was absent, establishing the expected pre-implementation failure;
+- repository policy — PASS with `docs/START_HERE.md` present, the legacy root path absent, updated agent guidance, synchronized `active_task_id: null`, every task `done`, and `last_completed_task_id: BI-097`;
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests with 76 integration tests deselected, and Compose rendering;
 - no product/runtime behavior changed, so integration and clean-export checks were not rerun; the latest live acceptance remains the BI-096 evidence below.
 
 ### Latest live validation

@@ -326,3 +326,16 @@ tasks:
       - The named revision contains every required snapshot, demo, clean-export, test, and operator-document path and begins with an empty Git status.
       - The clean-checkout walkthrough passes locked setup, doctor, Compose rendering, seed, all four demos, offline tests, exact final inspection, and bounded cleanup.
       - Audit-owned resources are absent afterward, protected fingerprints are unchanged, and the evidence does not reclassify or erase BI-090's original dirty baseline.
+
+  - id: BI-097
+    title: Move the session entry point under docs
+    status: done
+    depends_on: [BI-096]
+    scope:
+      - Move the repository navigation entry point from START_HERE.md to docs/START_HERE.md.
+      - Update active instructions, links, and path-sensitive checks without changing product behavior or architectural contracts.
+      - Synchronize project state and append completion evidence to the worklog.
+    acceptance:
+      - docs/START_HERE.md is the sole active session-navigation entry point and no root START_HERE.md remains.
+      - Active repository references and checks use docs/START_HERE.md while historical worklog evidence remains unchanged.
+      - Repository policy, lint, tests, and full verification pass with no product/runtime behavior change.

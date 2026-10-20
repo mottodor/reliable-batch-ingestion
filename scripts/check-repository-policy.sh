@@ -11,6 +11,18 @@ fail() {
   failures=$((failures + 1))
 }
 
+if [[ ! -f docs/START_HERE.md ]]; then
+  fail "session navigation entry point is missing: docs/START_HERE.md"
+elif [[ -e START_HERE.md ]]; then
+  fail "legacy root session navigation entry point still exists: START_HERE.md"
+elif ! grep -Fq '`docs/START_HERE.md`' AGENTS.md; then
+  fail "AGENTS.md does not reference docs/START_HERE.md"
+elif grep -Fq '`START_HERE.md`' AGENTS.md; then
+  fail "AGENTS.md still references the legacy root START_HERE.md path"
+else
+  printf 'OK   session navigation entry point is docs/START_HERE.md\n'
+fi
+
 printf 'Checking repository-owned text for Cyrillic characters...\n'
 set +e
 python3 - <<'PY'

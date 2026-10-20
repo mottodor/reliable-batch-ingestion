@@ -891,3 +891,14 @@ A concise append-only record of work sessions. The detailed current handoff live
 - `make lint` — PASS; `make test` — PASS with 682 tests and 76 integration tests deselected; `./scripts/verify.sh` — PASS with doctor, terminal-state policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests, and Compose rendering.
 - Integration and clean-export checks were NOT RUN because this closeout changes only repository workflow, schema, and documentation; the latest live BI-096 acceptance evidence remains unchanged.
 - Next task: none scheduled; when the owner requests a concrete improvement or correction, create and activate one bounded backlog task before implementation.
+
+## 2026-10-19 — BI-097 session entry-point relocation
+
+- Created and activated the explicitly authorized BI-097 documentation-only task from the terminal backlog state.
+- Added a repository-policy assertion first and observed the expected failure because `docs/START_HERE.md` did not yet exist.
+- Moved the navigation entry point from root `START_HERE.md` to `docs/START_HERE.md`, updated `AGENTS.md`, README, and the implementation plan, and preserved historical worklog wording.
+- Added policy enforcement for the new file, removal of the legacy root path, and active agent guidance so the old layout cannot return silently.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 682 offline tests with 76 integration tests deselected, and Compose rendering.
+- Integration and clean-export checks were NOT RUN because no product/runtime behavior, dependency, object contract, ADR, or delivery semantics changed.
+- Marked BI-097 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-097`.
+- Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.

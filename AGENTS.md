@@ -6,7 +6,7 @@ This repository is the source of truth for the Reliable Batch Ingestion Lab. Cha
 
 Before changing code or documentation, the agent must:
 
-1. Read `START_HERE.md`.
+1. Read `docs/START_HERE.md`.
 2. Read `docs/STATE.md`.
 3. Read `docs/specification/batch-ingestion.md`, excluding **Possible extensions** from the current scope.
 4. Read `tasks/backlog.yaml` and confirm that its `active_task_id` matches `docs/STATE.md`. If it names a task, locate that task; if it is `null`, confirm that every recorded task is done before creating a newly authorized atomic task.
@@ -38,7 +38,7 @@ Document roles are intentionally distinct:
 - `docs/IMPLEMENTATION_PLAN.md` explains task ordering but does not duplicate status;
 - `docs/WORKLOG.md` is append-only historical evidence;
 - `README.md` describes only commands and behavior that currently exist;
-- `START_HERE.md` is navigation, not a second operating contract.
+- `docs/START_HERE.md` is navigation, not a second operating contract.
 
 Do not silently change an architectural decision. Replacing a service, changing the manifest or object-key contract, or strengthening delivery semantics requires an ADR first.
 

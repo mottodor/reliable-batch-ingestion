@@ -2,10 +2,11 @@
 
 A learning project for building restart-safe, idempotent batch ingestion from REST APIs, PostgreSQL, and CSV/JSON/Parquet files into S3-compatible object storage.
 
-> Current stage: the core lab, independent audit follow-ups, and BI-096 clean-commit reproducibility attestation are complete. The backlog is terminal with no active task; future improvements or corrections begin as new explicitly authorized atomic tasks.
+> Current stage: the core lab, independent audit follow-ups, BI-096 clean-commit reproducibility attestation, and BI-097 session-navigation relocation are complete. The backlog is terminal with no active task; future improvements or corrections begin as new explicitly authorized atomic tasks.
 
 ## Project references
 
+- Session navigation: [`docs/START_HERE.md`](docs/START_HERE.md)
 - Product requirements: [`docs/specification/batch-ingestion.md`](docs/specification/batch-ingestion.md)
 - Core deterministic contracts: [`docs/contracts/core-contracts.md`](docs/contracts/core-contracts.md)
 - Shared S3 storage contract: [`docs/contracts/storage-contract.md`](docs/contracts/storage-contract.md)
