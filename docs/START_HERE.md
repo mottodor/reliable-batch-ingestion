@@ -15,6 +15,8 @@ This file is the short entry point for a new coding-agent session. It is navigat
 | Concern | Canonical file |
 | --- | --- |
 | Agent operating rules | `AGENTS.md` |
+| Learner introduction and quick start | `README.md` |
+| Complete operator command and recovery reference | `docs/guides/operator-guide.md` |
 | Product scope and required behavior | `docs/specification/batch-ingestion.md` |
 | Architectural decisions | `docs/adr/README.md` and accepted ADRs |
 | Active/terminal state and atomic backlog | `tasks/backlog.yaml` |

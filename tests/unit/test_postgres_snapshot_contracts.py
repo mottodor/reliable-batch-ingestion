@@ -394,6 +394,9 @@ def test_postgres_snapshot_documentation_covers_public_contract_and_recovery() -
     repository_root = Path(__file__).resolve().parents[2]
     contract = (repository_root / "docs/ingestion/postgres-snapshot.md").read_text(encoding="utf-8")
     readme = (repository_root / "README.md").read_text(encoding="utf-8")
+    operator_guide = (repository_root / "docs" / "guides" / "operator-guide.md").read_text(
+        encoding="utf-8"
+    )
     descriptor = _descriptor()
 
     required_contract_text = {
@@ -420,7 +423,7 @@ def test_postgres_snapshot_documentation_covers_public_contract_and_recovery() -
 
     assert all(value in contract for value in required_contract_text)
     assert "docs/ingestion/postgres-snapshot.md" in readme
-    assert "PostgreSQL snapshot failure and recovery exercises" in readme
+    assert "PostgreSQL snapshot failure and recovery exercises" in operator_guide
 
 
 def test_snapshot_contract_import_does_not_read_configuration_or_open_clients(

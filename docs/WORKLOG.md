@@ -902,3 +902,16 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Integration and clean-export checks were NOT RUN because no product/runtime behavior, dependency, object contract, ADR, or delivery semantics changed.
 - Marked BI-097 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-097`.
 - Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.
+
+## 2026-10-20 — BI-098 learner-facing README restructure
+
+- Created and activated the explicitly authorized BI-098 documentation task from terminal backlog state.
+- Added documentation checks first and observed five expected failures against the 308-line README and absent operator guide.
+- Rewrote the root README as a 116-line learning path centered on the main question, outcomes, architecture, quick start, public demos, mandatory failure exercises, honest limitations, and progressive navigation.
+- Preserved the complete validated setup, lifecycle, source-ingestion, recovery, demonstration, cleanup, command, and secret-handling reference in `docs/guides/operator-guide.md`, with corrected relative links and a route back to the learner README.
+- Updated source documentation tests to distinguish concise README navigation from detailed operator requirements; focused tests passed with 98 cases and every relative Markdown link resolved.
+- Active LSP diagnostics over four changed Python test files — PASS with no findings; `make lint` — PASS; `make test` — PASS with 683 offline tests and 76 integration tests deselected.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 683 offline tests, and Compose rendering.
+- Integration and clean-export checks were NOT RUN because no product/runtime behavior, dependency, configuration, object contract, ADR, or delivery semantics changed.
+- Marked BI-098 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-098`.
+- Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.

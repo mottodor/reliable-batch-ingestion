@@ -64,6 +64,7 @@ from batch_ingestion.manifests import Manifest, ManifestStatus
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE_PATH = REPOSITORY_ROOT / "Makefile"
 README_PATH = REPOSITORY_ROOT / "README.md"
+OPERATOR_GUIDE_PATH = REPOSITORY_ROOT / "docs" / "guides" / "operator-guide.md"
 EXAMPLE_ENV_PATH = REPOSITORY_ROOT / ".env.example"
 
 SECRET_VARIABLES = (
@@ -143,9 +144,10 @@ def test_make_exposes_exact_demo_surface_with_preflight_and_forwarding() -> None
     assert '--project-name "$(COMPOSE_PROJECT_NAME)"' in makefile
 
 
-def test_make_and_readme_describe_the_exact_pure_preflight_surface() -> None:
+def test_make_and_operator_guide_describe_the_exact_pure_preflight_surface() -> None:
     makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
     readme = README_PATH.read_text(encoding="utf-8")
+    operator_guide = OPERATOR_GUIDE_PATH.read_text(encoding="utf-8")
 
     assert (
         "init-local-env: ## Initialize placeholders and validate complete local configuration"
@@ -155,10 +157,46 @@ def test_make_and_readme_describe_the_exact_pure_preflight_surface() -> None:
         "check-local-env: ## Validate complete application and Compose-only local settings"
         in makefile
     )
-    assert "PostgreSQL, S3, HTTP, file, snapshot, and logging settings" in readme
-    assert "Compose-only ports, Garage RPC secret, and recognized placeholders" in readme
-    assert "does not contact services or prove that credentials are accepted" in readme
-    assert "SOURCE_SEED" in readme
+    assert "docs/guides/operator-guide.md" in readme
+    assert "PostgreSQL, S3, HTTP, file, snapshot, and logging settings" in operator_guide
+    assert "Compose-only ports, Garage RPC secret, and recognized placeholders" in operator_guide
+    assert "does not contact services or prove that credentials are accepted" in operator_guide
+    assert "SOURCE_SEED" in operator_guide
+
+
+def test_readme_is_a_concise_learner_path_with_mandatory_recovery_exercises() -> None:
+    readme = README_PATH.read_text(encoding="utf-8")
+
+    assert len(readme.splitlines()) < 180
+    for heading in (
+        "## What you will learn",
+        "## Quick start",
+        "## Try the failure exercises",
+        "## Where to go next",
+    ):
+        assert heading in readme
+    for command in (
+        "make demo-happy-path",
+        "make demo-duplicate",
+        "make demo-api-retry",
+        "make demo-bad-file",
+        "make demo-inspect",
+    ):
+        assert command in readme
+    for scenario in (
+        "api-rate-limit",
+        "api-permanent-500",
+        "api-malformed-json",
+        "file-same-name",
+        "file-renamed-content",
+        "file-schema-invalid",
+        "postgres-connection-drop",
+        "s3-unavailable",
+        "payload-before-manifest",
+    ):
+        assert f"SCENARIO={scenario}" in readme
+    assert "Expected retained state" in readme
+    assert "Recovery" in readme
 
 
 def test_initializer_creates_owner_only_file_and_prints_no_values(tmp_path: Path) -> None:

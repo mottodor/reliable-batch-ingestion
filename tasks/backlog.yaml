@@ -339,3 +339,18 @@ tasks:
       - docs/START_HERE.md is the sole active session-navigation entry point and no root START_HERE.md remains.
       - Active repository references and checks use docs/START_HERE.md while historical worklog evidence remains unchanged.
       - Repository policy, lint, tests, and full verification pass with no product/runtime behavior change.
+
+  - id: BI-098
+    title: Restructure the learner-facing README
+    status: done
+    depends_on: [BI-097]
+    scope:
+      - Make the root README a concise learner-oriented introduction and quick-start path.
+      - Move detailed setup, command, ingestion, recovery, and operational reference material into a clearly linked guide.
+      - Preserve every implemented command, mandatory failure-state recovery instruction, and honest delivery limitation without changing runtime behavior or architectural contracts.
+      - Update documentation checks and synchronize project handoff records.
+    acceptance:
+      - README quickly explains the learning goal, architecture, prerequisites, happy-path workflow, and where to continue.
+      - README is materially shorter than the prior 308-line version and retains the specification-required failure exercises in a compact form.
+      - The linked detailed guide preserves the complete validated operator reference, including setup, lifecycle, source commands, recovery states, demos, command index, and limitations.
+      - Documentation tests, repository policy, lint, offline tests, and full verification pass with no product/runtime behavior change.

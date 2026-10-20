@@ -161,6 +161,9 @@ def test_recovery_operator_document_covers_the_complete_allow_list() -> None:
     repository_root = Path(__file__).resolve().parents[2]
     document_path = repository_root / "docs" / "ingestion" / "recovery-demos.md"
     readme = (repository_root / "README.md").read_text(encoding="utf-8")
+    operator_guide = (repository_root / "docs" / "guides" / "operator-guide.md").read_text(
+        encoding="utf-8"
+    )
 
     document = document_path.read_text(encoding="utf-8")
     scenarios = (
@@ -190,5 +193,7 @@ def test_recovery_operator_document_covers_the_complete_allow_list() -> None:
     assert "not an atomic rename" in document
     assert "concurrent writers" in document
     assert "docs/ingestion/recovery-demos.md" in readme
-    assert "scripts/check_clean_export.py" in readme
+    assert "docs/guides/operator-guide.md" in readme
+    assert "scripts/check_clean_export.py" in operator_guide
     assert "not_implemented" not in readme
+    assert "not_implemented" not in operator_guide

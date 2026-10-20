@@ -478,6 +478,9 @@ def test_file_ingestion_documentation_covers_public_contract_and_recovery() -> N
     repository_root = Path(__file__).resolve().parents[2]
     contract = (repository_root / "docs/ingestion/file-ingestion.md").read_text(encoding="utf-8")
     readme = (repository_root / "README.md").read_text(encoding="utf-8")
+    operator_guide = (repository_root / "docs" / "guides" / "operator-guide.md").read_text(
+        encoding="utf-8"
+    )
     fixture = repository_root / "fixtures/supplier-prices/canonical/valid.csv"
     delivery = _delivery(actual_sha256=sha256(fixture.read_bytes()).hexdigest())
 
@@ -504,4 +507,4 @@ def test_file_ingestion_documentation_covers_public_contract_and_recovery() -> N
 
     assert all(value in contract for value in required_contract_text)
     assert "docs/ingestion/file-ingestion.md" in readme
-    assert "File failure and recovery exercises" in readme
+    assert "File failure and recovery exercises" in operator_guide
