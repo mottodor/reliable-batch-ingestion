@@ -939,3 +939,25 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Integration and clean-export checks were NOT RUN because BI-099 changes only Git history and handoff documentation and the rewritten product tree is byte-identical to the already validated original tip.
 - Marked BI-099 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-099`.
 - Next task: none scheduled. If a shared remote is introduced, first authorize one bounded operational task to publish rewritten `main` and the archive tag together after confirming no consumer depends on the old branch tip.
+
+## 2026-10-20 — BI-100 old-history removal planning
+
+- The project owner explicitly confirmed that no external consumer depends on the pre-BI-099 tip and requested that the old commit variation not be retained.
+- Created and activated BI-100 to delete only `archive/pre-bi099-history`, expire all local reflogs, and immediately prune unreachable old-history objects without changing rewritten `main` or product files.
+- Before cleanup, the archive tag peeled to `c6d4b1537b3deeda0d5d1568db97a27394dfd207`, all three representative old commits resolved, and 106 reflog entries could retain superseded rebase objects.
+- Historical BI-090/BI-096 reports and prior append-only worklog entries remain unchanged as records of what was evaluated; after cleanup, their old SHA strings are evidence identifiers rather than locally resolvable objects.
+- Startup `./scripts/doctor.sh` — PASS with no warnings.
+- Next task: commit the BI-100 active plan, remove the archive ref and reflog retention, prune immediately, and prove only rewritten history remains.
+
+## 2026-10-20 — BI-100 old-history removal completion
+
+- Deleted annotated tag `archive/pre-bi099-history`, expired all local reflogs with immediate reachable/unreachable cutoffs, and ran `git gc --prune=now` under the owner's explicit authorization.
+- `git show-ref` then contained only rewritten `refs/heads/main`; the 106 pre-cleanup reflog entries were reduced to zero.
+- Confirmed through `git cat-file` failure that old unique tip `c6d4b1537b3deeda0d5d1568db97a27394dfd207`, failed candidate `5ee3781f8955e109b6890b117b9070fdd718ad5b`, and passing candidate `a4ef6d34fad5629c992385c26ede74a12b937563` are absent from the local object database.
+- Preserved pre-BI-100 commit `0c85343b3318ad0375ce5a6b2547f65f92203b81` and tree `ab24eb3895e9a01137e9aa82e6cb52c40796e668` unchanged as the BI-100 parent; `main` remains linear and `git fsck --full --no-dangling` passed.
+- Left all historical BI-090/BI-096 audit text and earlier worklog entries unchanged. Their old unique SHA strings remain evidence identifiers but intentionally no longer resolve in this repository.
+- Repository policy and `git diff --check` — PASS; `make lint` — PASS; `make test` — PASS with 683 offline tests and 76 integration tests deselected.
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 81 source files, 683 offline tests, and Compose rendering.
+- Integration and clean-export checks were NOT RUN because no product/runtime tree changed.
+- Marked BI-100 done, restored terminal backlog state, and scheduled one final post-commit reflog expiration/prune so the cleanup commit itself leaves no reflog retention.
+- Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.

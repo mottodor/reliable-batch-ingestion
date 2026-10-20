@@ -4,11 +4,11 @@ Updated: 2026-10-20
 
 ## Current stage
 
-The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete: BI-091 and BI-092 implemented the accepted ADR 0003 REST logical-run manifest; BI-093 normalized terminal storage failures; BI-094 enforced the total REST response deadline; BI-095 aligned local preflight with complete application configuration; and BI-096 attested clean-commit reproducibility. BI-096's exact original audit candidates remain reachable in the archived pre-rewrite history. BI-097 moved the session navigation entry point to `docs/START_HERE.md`, BI-098 restructured the learner README while preserving the full operator guide, and BI-099 replaced the largest mixed Git commits with smaller task-focused series. The rewritten pre-task tree is byte-identical to the original tip; historical audit text, runtime behavior, tests, dependencies, contracts, and ADRs are unchanged. Every recorded task is done and no task is active.
+The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete. BI-097 moved the session navigation entry point, BI-098 restructured the learner README, and BI-099 replaced the largest mixed Git commits with smaller task-focused series. After the project owner confirmed that no external consumer depends on the old tip, BI-100 removed the temporary archive tag, expired local reflogs, and pruned unreachable pre-rewrite objects. Only rewritten `main` remains locally; historical audit/worklog SHA strings are retained as immutable evidence text but no longer resolve when unique to the deleted history. Product behavior, tests, dependencies, contracts, and ADRs are unchanged. Every recorded task is done and no task is active.
 
 ```yaml
 active_task_id: null
-last_completed_task_id: BI-099
+last_completed_task_id: BI-100
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active or terminal state. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`; `null` is valid only while every recorded task is `done`.
@@ -181,7 +181,9 @@ last_completed_task_id: BI-099
 - documentation checks now enforce the concise learner path, operator-guide details, mandatory recovery exercises, and links to source-specific contracts;
 - BI-098 is done, and BI-099 preserved the complete original history under `archive/pre-bi099-history` while replacing seven oversized history regions with task-focused commits;
 - the rewritten pre-task commit `80df9640874b7af381a36d4ae7807b0f18c1ce2f` and archived original tip `c6d4b1537b3deeda0d5d1568db97a27394dfd207` share tree `1b8f1f3ae0d8732b5e51232e93074d5ea0e469bd` and have an empty diff;
-- the project is again in terminal backlog state, BI-099 is done, and `active_task_id: null` records that no task is currently authorized or active.
+- BI-100 applied the owner's superseding retention decision: `archive/pre-bi099-history` is deleted, all local reflogs were expired, unreachable old-history objects were pruned, and the representative old unique SHA values no longer resolve;
+- pre-BI-100 commit `0c85343b3318ad0375ce5a6b2547f65f92203b81` and tree `ab24eb3895e9a01137e9aa82e6cb52c40796e668` remain unchanged under linear `main`;
+- the project is again in terminal backlog state, BI-100 is done, and `active_task_id: null` records that no task is currently authorized or active.
 
 ## Not completed
 
@@ -194,8 +196,22 @@ last_completed_task_id: BI-099
 - Source adapters must include every value that changes selected logical data in `BatchIdentity.parameters`; omission would cause an identifier collision.
 - Ignored `.env` files created before BI-070 slice 1 must be refreshed with the committed HTTP, `FILE_*`, PostgreSQL timeout, and `SNAPSHOT_*` settings before integration targets or ingestion CLIs can load complete configuration.
 - BI-090-F01–F05 remain the authoritative findings for the frozen audit baseline. Their follow-ups have technical PASS evidence from BI-096 for F01, accepted ADR 0003 plus completed BI-092 for F02, completed BI-093 for F03, completed BI-094 for F04, and completed BI-095 for F05. BI-096 does not retroactively reclassify F01's original dirty baseline. The exact original failed traceability rows and follow-up mapping remain in `docs/audits/BI-090.md`.
+- After BI-100, SHA values unique to the deleted pre-rewrite history remain documentary evidence identifiers only; this local repository intentionally no longer retains the corresponding Git objects.
 
 ## Latest validation
+
+2026-10-20, BI-100 archived-history removal:
+
+- owner authorization established that no external consumer depends on the old tip;
+- deleted `archive/pre-bi099-history`; `refs/heads/main` is the only Git ref — PASS;
+- expired all 106 prior reflog entries and immediately pruned unreachable objects — PASS;
+- representative old unique commits `c6d4b15…`, `5ee3781…`, and `a4ef6d3…` no longer resolve — PASS;
+- pre-BI-100 commit `0c85343…` and tree `ab24eb3…` remain unchanged, `main` remains linear, and full `git fsck` passes;
+- repository policy and `git diff --check` — PASS;
+- `make lint` — PASS with Ruff, formatting, and strict mypy over 81 source files;
+- `make test` — PASS with 683 offline tests and 76 integration tests deselected;
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy, 683 offline tests, and Compose rendering;
+- integration and clean-export checks were NOT RUN because no product/runtime tree changed.
 
 2026-10-20, BI-099 cohesive Git history rewrite:
 
@@ -241,4 +257,4 @@ last_completed_task_id: BI-099
 
 ## Next atomic step
 
-No implementation task is scheduled. If this repository is later connected to a shared remote, create one authorized operational task to publish rewritten `main` and `archive/pre-bi099-history` together after confirming that no consumer depends on the old branch tip.
+No implementation task is scheduled. When the owner requests another concrete improvement or correction, create and activate one bounded backlog task before implementation.

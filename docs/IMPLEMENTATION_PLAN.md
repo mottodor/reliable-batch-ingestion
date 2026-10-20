@@ -248,6 +248,18 @@ Detailed execution plan: [`docs/plans/BI-099.md`](plans/BI-099.md).
 
 Outcome: `main` presents reviewable, task-focused changes while the original audited history remains reachable and product behavior is unchanged.
 
+## Maintenance — remove archived pre-rewrite history (`BI-100`)
+
+Detailed execution plan: [`docs/plans/BI-100.md`](plans/BI-100.md).
+
+- apply the owner's explicit decision that no external consumer depends on the old tip;
+- delete the pre-BI-099 archive tag and expire local reflogs;
+- prune unreachable old-history objects immediately;
+- preserve rewritten `main`, current product behavior, and immutable historical audit text;
+- prove old unique SHA absence and current-history integrity before terminal closeout.
+
+Outcome: only the cohesive rewritten history remains in the local Git object database, while documentation truthfully records the superseding retention decision.
+
 ## Common quality gates
 
 For every gate:

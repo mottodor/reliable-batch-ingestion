@@ -370,3 +370,19 @@ tasks:
       - Rewritten subjects use a consistent type(scope) outcome style and commit bodies state purpose and scope without inventing validation evidence.
       - The rewritten pre-BI-099 tree ID equals the archived original tip tree and their Git diff is empty.
       - Repository policy, lint, offline tests, and full verification pass with no product/runtime behavior change.
+
+  - id: BI-100
+    title: Remove archived pre-rewrite Git history
+    status: done
+    depends_on: [BI-099]
+    scope:
+      - Apply the project owner's explicit decision not to retain the pre-BI-099 commit variation.
+      - Delete the archive tag, expire local reflogs, and prune unreachable old-history objects.
+      - Preserve the rewritten main branch, product tree, historical audit text, runtime behavior, tests, dependencies, contracts, and ADRs.
+      - Synchronize current state and append-only worklog evidence after the irreversible cleanup.
+    acceptance:
+      - No Git ref retains archive/pre-bi099-history and local reflogs are empty after final cleanup.
+      - The old unique tip and representative audit-candidate commit IDs no longer resolve in the local object database.
+      - Rewritten main remains linear and its pre-BI-100 tree is unchanged.
+      - Current documentation clearly distinguishes historical SHA text from locally resolvable Git objects.
+      - Repository policy, lint, offline tests, and full verification pass with no product/runtime behavior change.
