@@ -272,6 +272,18 @@ Detailed execution plan: [`docs/plans/BI-101.md`](plans/BI-101.md).
 
 Outcome: future durable commits remain task-linked and consistently formatted both locally and in the full repository gate.
 
+## Maintenance — local-preflight test execution (`BI-102`)
+
+Detailed execution plan: [`docs/plans/BI-102.md`](plans/BI-102.md).
+
+- move the BI-095 validation matrix from one child Python process per case to direct tests of `read_env()`, `validate_environment()`, and `main()`;
+- retain exactly one valid and one invalid real-script smoke test plus the existing real-Make reset command boundaries;
+- preserve every application, Compose-only, cross-field, output, exit-code, and redaction category without changing runtime behavior;
+- use deterministic process-boundary assertions and record focused before/after timing as non-gating evidence;
+- run focused, LSP, policy, lint, offline, and full repository gates before closeout.
+
+Outcome: the complete local-preflight contract remains explicit and independently diagnosable without paying for a new Python interpreter in every validation case.
+
 ## Common quality gates
 
 For every gate:

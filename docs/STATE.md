@@ -4,11 +4,11 @@ Updated: 2026-10-20
 
 ## Current stage
 
-The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete. BI-097 moved the session navigation entry point, BI-098 restructured the learner README, BI-099 rewrote oversized commits into task-focused series, and BI-100 removed the obsolete archived history after owner authorization. BI-101 now enforces `type(scope): outcome (BI-NNN)` for every commit after BI-100 through one versioned `commit-msg` hook and the durable repository gate. The current clone uses `core.hooksPath=.githooks`; product behavior, dependencies, contracts, and ADRs are unchanged. Every recorded task is done and no task is active.
+The core lab through BI-080 is implemented, and BI-090 independently qualified its acceptance claim. All five bounded audit follow-ups are complete. BI-097 moved the session navigation entry point, BI-098 restructured the learner README, BI-099 rewrote oversized commits into task-focused series, BI-100 removed the obsolete archived history after owner authorization, and BI-101 enforces `type(scope): outcome (BI-NNN)` for every commit after BI-100. BI-102 now exercises the complete BI-095 preflight matrix directly through `read_env()`, `validate_environment()`, and `main()`, retaining exactly one valid and one invalid executable-script smoke test plus the real-Make reset boundaries. Every recorded task is done and no task is active.
 
 ```yaml
 active_task_id: null
-last_completed_task_id: BI-101
+last_completed_task_id: BI-102
 ```
 
 `tasks/backlog.yaml` is canonical for task status and the active or terminal state. The value above is a handoff mirror checked by `scripts/check-repository-policy.sh`; `null` is valid only while every recorded task is `done`.
@@ -185,7 +185,10 @@ last_completed_task_id: BI-101
 - pre-BI-100 commit `0c85343b3318ad0375ce5a6b2547f65f92203b81` and tree `ab24eb3895e9a01137e9aa82e6cb52c40796e668` remain unchanged under linear `main`;
 - BI-101 adds one standard-library commit-message validator, an executable versioned hook, explicit idempotent installation, Make and repository-policy range checks after BI-100, contributor guidance, and 28 focused tests;
 - the current clone has `core.hooksPath=.githooks`, an actual invalid commit attempt is rejected without moving `HEAD`, and durable policy catches invalid subjects even when a local hook is bypassed;
-- the project is again in terminal backlog state, BI-101 is done, and `active_task_id: null` records that no task is currently authorized or active.
+- BI-101 closed in terminal backlog state before the owner subsequently authorized BI-102 as a separate test-only maintenance task;
+- BI-102 adds 46 in-process parser, validator, and command-boundary cases covering every planned BI-095 category, stable exits/output, and redaction while changing no runtime code;
+- the old per-case subprocess matrix is removed; exactly two focused tests invoke the executable preflight script, while reset and destructive-reset tests retain their real Make boundary;
+- BI-102 is done, every recorded task is complete, and `active_task_id: null` restores terminal backlog state.
 
 ## Not completed
 
@@ -201,6 +204,36 @@ last_completed_task_id: BI-101
 - After BI-100, SHA values unique to the deleted pre-rewrite history remain documentary evidence identifiers only; this local repository intentionally no longer retains the corresponding Git objects.
 
 ## Latest validation
+
+2026-10-20, BI-102 slice 2 and closeout:
+
+- structural inspection — PASS: `_run_preflight()` has exactly two test call sites, one valid and one invalid executable-script smoke test; reset tests retain the separate real-Make subprocess helper;
+- focused local-infrastructure module — PASS with 52 tests in 0.82 seconds pytest time and 1.04 seconds wall time, compared with the recorded pre-refactor 45 tests in 6.56 seconds pytest time and 6.74 seconds wall time;
+- focused config/API-config/local-preflight modules — PASS with 89 tests in 0.84 seconds pytest time and 1.07 seconds wall time;
+- active LSP diagnostics over `tests/unit/test_local_infrastructure_commands.py` — PASS with no findings; focused Ruff, format, and `git diff --check` — PASS;
+- `make lint` — PASS with Ruff, formatting, and strict mypy over 82 source files; `make test` — PASS with 718 offline tests and 76 integration tests deselected;
+- repository policy and `./scripts/verify.sh` — PASS with synchronized terminal state, locked dependency sync, lint, offline tests, and Compose rendering;
+- integration and clean-export checks were NOT RUN because BI-102 changes only tests and handoff documentation, not runtime or infrastructure behavior.
+
+2026-10-20, BI-102 slice 1:
+
+- pre-change local-infrastructure baseline — PASS with 45 tests in 6.56 seconds pytest time and 6.74 seconds wall time; 41 test items invoked `_run_preflight()` directly;
+- direct parser, validator, and `main()` selection — PASS with 46 tests and 45 deselected in 0.16 seconds;
+- focused config/API-config/local-preflight modules — PASS with 128 tests in 7.26 seconds;
+- complete slice-1 local-infrastructure module — PASS with 91 tests in 7.25 seconds pytest time and 7.49 seconds wall time while the subprocess equivalence matrix remains intentionally present;
+- Ruff and format checks for the changed test module — PASS;
+- active LSP diagnostics over `tests/unit/test_local_infrastructure_commands.py` — PASS with no findings;
+- repository policy and `git diff --check` — PASS; `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 82 source files, 757 offline tests, and Compose rendering;
+- integration and clean-export checks were NOT RUN because slice 1 changes only tests and handoff documentation; slice 2 still owns final BI-102 closeout.
+
+2026-10-20, BI-102 local-preflight test-execution planning:
+
+- fresh structural audit collected 787 tests and confirmed only one exact duplicate test-body pair; the dominant issue is test scaffolding and execution overhead rather than redundant behavioral coverage;
+- baseline offline suite — PASS with 711 tests and 76 integration tests deselected in 9.90 seconds; focused local-infrastructure module — PASS with 45 tests in 7.16 seconds;
+- all accepted ADRs were reviewed and remain unchanged; the implementation-ready BI-102 plan is strictly test-only;
+- backlog/schema assertions, active-task synchronization, repository policy, and `git diff --check` — PASS with BI-102 as the sole active `todo` task and BI-101 as the last completed task;
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 82 source files, 711 offline tests, and Compose rendering;
+- integration and clean-export checks were NOT RUN because planning changes no product/runtime code, infrastructure, configuration behavior, object contract, or operator command.
 
 2026-10-20, BI-101 commit-message enforcement:
 

@@ -402,3 +402,20 @@ tasks:
       - Repository policy validates every commit after BI-100 so local hook bypass does not bypass the durable gate.
       - Hook installation sets core.hooksPath to .githooks explicitly and idempotently.
       - The BI-101 commit itself, repository policy, lint, offline tests, and full verification pass.
+
+  - id: BI-102
+    title: Refactor local-preflight test execution
+    status: done
+    depends_on: [BI-095, BI-101]
+    scope:
+      - Move the local-environment validation matrix from one child Python process per case to direct tests of read_env, validate_environment, and main.
+      - Retain exactly one valid and one invalid real-script smoke test while preserving the separate real-Make reset command tests.
+      - Preserve every BI-095 application, Compose-only, cross-field, output, exit-code, and redaction category without changing runtime code or dependencies.
+      - Record deterministic process-boundary and before/after timing evidence, then synchronize repository handoff documents.
+    acceptance:
+      - Direct parameterized tests retain omitted-setting coverage for PostgreSQL, S3, HTTP, file, snapshot, and logging plus malformed, boundary, protocol-maximum, URL, cross-field, local-port, placeholder, and Garage RPC-secret cases.
+      - Exactly two focused tests invoke scripts/check_local_env.py as a child process, one valid and one invalid, and no parameterized validation-matrix case starts that process.
+      - Stable success, failure, and usage exits and output remain covered, and no sentinel credential, credential-bearing URL, generated value, invalid secret evidence, or full dotenv mapping is disclosed.
+      - Existing reset and destructive-reset command tests retain their real Make boundary, while unit tests open no network, PostgreSQL, S3, Garage-admin, or Compose connection.
+      - No product/runtime code, dependency, environment template, Make behavior, operator documentation, contract, or ADR changes.
+      - Focused tests, active LSP diagnostics, repository policy, lint, offline tests, and full verification pass, with before/after focused timing recorded as non-gating evidence.

@@ -986,3 +986,48 @@ A concise append-only record of work sessions. The detailed current handoff live
 - Integration and clean-export checks were NOT RUN because no ingestion/runtime behavior, dependency, object contract, ADR, or infrastructure changed.
 - Marked BI-101 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-101`.
 - Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.
+
+## 2026-10-20 — BI-102 local-preflight test-execution planning
+
+- The project owner explicitly authorized the recommended test-only maintenance task from terminal backlog state.
+- Created and activated BI-102 to move the BI-095 local-environment validation matrix from one child Python process per case to direct `read_env()`, `validate_environment()`, and `main()` tests.
+- Fixed the planning baseline at 787 collected tests, 711 passing offline tests in 9.90 seconds, and 45 passing `test_local_infrastructure_commands.py` cases in 7.16 seconds; timing remains evidence rather than a flaky acceptance threshold.
+- Required exactly one valid and one invalid real `scripts/check_local_env.py` smoke test, while preserving the unrelated real-Make reset command tests.
+- Preserved explicit coverage for every BI-095 application group, Compose-only port, placeholder, Garage RPC-secret, malformed/boundary/protocol, credential-bearing URL, cross-field, output, exit-code, and redaction category.
+- Bounded BI-102 to tests and handoff documentation: no runtime code, dependency, environment template, Make behavior, operator claim, contract, ADR, integration-test, or clean-export change is authorized.
+- Read all accepted ADRs; BI-102 changes none of their architecture or required live evidence. Startup `./scripts/doctor.sh` — PASS with no warnings.
+- Backlog/schema assertions, active-task synchronization, repository policy, and `git diff --check` — PASS.
+- `./scripts/verify.sh` — PASS with doctor, policy, locked sync, Ruff, formatting, strict mypy over 82 source files, 711 offline tests, and Compose rendering.
+- Integration and clean-export checks were NOT RUN because BI-102 planning changes no product/runtime code, infrastructure, configuration behavior, object contract, or operator command.
+- Next task: implement BI-102 slice 1 by adding equivalent direct preflight tests before removing the per-case subprocess calls.
+
+## 2026-10-20 — BI-102 slice 1 direct preflight matrix
+
+- Re-ran the pre-change local-infrastructure module: 45 tests passed in 6.56 seconds pytest time and 6.74 seconds wall time; 41 collected items invoked `_run_preflight()` directly.
+- Imported and exercised `read_env()`, `validate_environment()`, and `main()` in process without changing `scripts/check_local_env.py` or any runtime path.
+- Added 46 direct cases covering complete and malformed dotenv parsing, missing paths, success/failure/usage exits, all six application-setting groups, the S3 retry budget, local ports, malformed/non-finite/boundary/enumeration/protocol values, credential-bearing URLs, file/snapshot cross-field constraints, all four placeholders, Garage RPC-secret syntax, and output redaction.
+- The direct-only selection passed with 46 tests and 45 deselected in 0.16 seconds; the focused config/API-config/local-preflight set passed with 128 tests in 7.26 seconds.
+- The complete slice-1 local-infrastructure module passed with 91 tests in 7.25 seconds pytest time and 7.49 seconds wall time; the original subprocess cases remain intentionally present for slice-1 equivalence.
+- Ruff and formatting checks passed for the changed test module; active LSP diagnostics reported no findings.
+- Marked BI-102 `in_progress`. Full lint, offline, policy, and verification closeout gates remain for slice 2; integration and clean-export remain out of scope because no runtime or infrastructure behavior changed.
+- Next task: implement BI-102 slice 2 by retaining exactly two executable-script smoke tests, removing per-case subprocess execution, and running the closeout gates.
+
+## 2026-10-20 — BI-102 slice 1 final verification
+
+- `git diff --check` and repository policy — PASS with BI-102 as the synchronized `in_progress` task and BI-101 as the last completed task.
+- `./scripts/verify.sh` — PASS with doctor, repository policy, locked dependency sync, Ruff, formatting, strict mypy over 82 source files, 757 offline tests, and Compose rendering.
+- This final evidence supersedes the earlier slice-entry deferral note for slice-1 gates; BI-102 remains in progress because the exactly-two-smoke-test boundary and task closeout belong to slice 2.
+- Integration and clean-export checks were NOT RUN because slice 1 changes only tests and handoff documentation.
+- Next task: implement BI-102 slice 2 by removing the per-case subprocess matrix, retaining exactly two executable-script smoke tests and the real-Make reset boundaries, and closing BI-102 after final gates.
+
+## 2026-10-20 — BI-102 slice 2 bounded script smoke coverage and closeout
+
+- Removed the 41-case executable preflight subprocess matrix after slice 1 established equivalent direct parser, validator, command-output, exit-code, and redaction coverage.
+- Retained exactly two `_run_preflight()` test call sites: one complete valid dotenv smoke test and one invalid Garage RPC-secret smoke test. Neither is parameterized.
+- Preserved the reset and destructive-reset tests through their separate real Make/subprocess helper; no unit test opened a network, PostgreSQL, S3, Garage-admin, or Compose connection.
+- Structural inspection confirmed exactly two executable preflight call sites. The focused module passed 52 tests in 0.82 seconds pytest time and 1.04 seconds wall time, compared with the recorded pre-refactor 45 tests in 6.56 seconds pytest time and 6.74 seconds wall time.
+- The focused config/API-config/local-preflight set passed 89 tests in 0.84 seconds pytest time and 1.07 seconds wall time. Focused Ruff, formatting, `git diff --check`, and active LSP diagnostics all passed with no findings.
+- `make lint` passed with Ruff, formatting, and strict mypy over 82 source files. `make test` passed with 718 offline tests and 76 integration tests deselected. Repository policy and `./scripts/verify.sh` passed, including locked dependency sync and Compose rendering.
+- Integration and clean-export checks were NOT RUN because BI-102 changes only tests and handoff documentation; runtime code, dependencies, environment templates, Make behavior, operator documentation, contracts, ADRs, and infrastructure behavior are unchanged.
+- Marked BI-102 done and restored terminal backlog state with `active_task_id: null` and `last_completed_task_id: BI-102`.
+- Next task: none scheduled; create and activate one bounded backlog task when the owner authorizes another concrete improvement or correction.
